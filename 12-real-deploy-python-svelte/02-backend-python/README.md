@@ -97,7 +97,16 @@ app.add_middleware(
 
 ## Cara Build Docker Image
 
+> [!NOTE]
+> Semua perintah di bawah dijalankan dari **root folder project kamu** (`my-todo-app/`).
+> Jika ingin langsung mencoba dengan kode referensi yang sudah ada, gunakan:
+> `cd /path/ke/repo/12-real-deploy-python-svelte/app`
+
 ```bash
+# Pastikan kamu berada di root project (my-todo-app/ atau app/)
+pwd
+# Output yang diharapkan: .../my-todo-app  ATAU  .../app
+
 # Masuk ke folder backend
 cd backend/
 

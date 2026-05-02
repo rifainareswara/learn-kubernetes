@@ -25,7 +25,19 @@ kubectl config current-context
 
 ## Langkah 1: Build Docker Images
 
-Masuk ke root direktori project kamu (folder yang berisi `backend/` dan `frontend/`):
+Masuk ke root direktori project kamu — ini adalah folder yang langsung berisi `backend/` dan `frontend/`:
+
+```bash
+# Jika menggunakan project kamu sendiri:
+cd ~/my-todo-app
+
+# Atau jika ingin langsung mencoba dengan kode referensi di repo ini:
+cd /path/ke/repo/12-real-deploy-python-svelte/app
+
+# Verifikasi kamu ada di tempat yang benar
+ls
+# Output yang diharapkan: backend/  frontend/  docker-compose.yml
+```
 
 ```bash
 # ── Build Backend (FastAPI) ───────────────────────────────────────────────────
