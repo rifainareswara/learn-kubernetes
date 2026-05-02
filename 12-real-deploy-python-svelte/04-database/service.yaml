@@ -7,7 +7,7 @@
 # Untuk StatefulSet, kita bisa menggunakan dua tipe Service:
 #
 # 1. Headless Service (clusterIP: None):
-#    - Memberikan DNS langsung ke Pod: postgres-0.postgres.myapp.svc.cluster.local
+#    - Memberikan DNS langsung ke Pod: postgres-0.postgres.todolist.svc.cluster.local
 #    - Cocok jika aplikasi perlu tahu Pod spesifik (misalnya untuk replication)
 #
 # 2. Regular ClusterIP Service:
@@ -21,7 +21,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: postgres          # PENTING: Nama ini harus cocok dengan DB_HOST di ConfigMap backend
-  namespace: myapp
+  namespace: todolist
   labels:
     app: postgres
     tier: database

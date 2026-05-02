@@ -63,7 +63,7 @@ Browser ──▶ /api/todos ──▶ Ingress ──▶ backend Service ──�
 
 Single Page Application (SPA) seperti Svelte menggunakan **client-side routing**. Artinya, URL seperti `/todos/123` dikelola oleh JavaScript di browser, bukan oleh server.
 
-**Masalah:** Jika pengguna mengakses langsung `http://myapp.com/todos/123`, Nginx akan mencari file `todos/123/index.html` yang tidak ada → 404 Not Found.
+**Masalah:** Jika pengguna mengakses langsung `http://todolist.com/todos/123`, Nginx akan mencari file `todos/123/index.html` yang tidak ada → 404 Not Found.
 
 **Solusi:** Konfigurasi `try_files` di Nginx:
 
@@ -176,13 +176,13 @@ Setelah deploy ke Kubernetes, cek apakah Nginx berjalan dengan benar:
 
 ```bash
 # Cek status Pod
-kubectl get pods -n myapp -l app=frontend
+kubectl get pods -n todolist -l app=frontend
 
 # Lihat logs Nginx
-kubectl logs -n myapp -l app=frontend
+kubectl logs -n todolist -l app=frontend
 
 # Port-forward untuk test lokal (tanpa Ingress)
-kubectl port-forward svc/frontend 8080:80 -n myapp
+kubectl port-forward svc/frontend 8080:80 -n todolist
 # Buka: http://localhost:8080
 ```
 

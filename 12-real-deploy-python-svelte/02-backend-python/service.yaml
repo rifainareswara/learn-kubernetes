@@ -12,13 +12,13 @@ apiVersion: v1
 kind: Service
 metadata:
   name: backend           # Nama service ini — digunakan sebagai DNS hostname di dalam cluster
-  namespace: myapp        # Harus sama dengan namespace Deployment
+  namespace: todolist        # Harus sama dengan namespace Deployment
   labels:
     app: backend
     tier: api
 spec:
   # ClusterIP: Service hanya dapat diakses dari dalam cluster
-  # Pod lain bisa mengakses dengan: http://backend.myapp.svc.cluster.local:8000
+  # Pod lain bisa mengakses dengan: http://backend.todolist.svc.cluster.local:8000
   # Atau cukup: http://backend:8000 (jika di namespace yang sama)
   type: ClusterIP
 

@@ -34,7 +34,7 @@ Google Artifact Registry adalah penerus Google Container Registry (GCR).
 
 ```bash
 # Buat repository untuk menyimpan Docker images
-gcloud artifacts repositories create myapp \
+gcloud artifacts repositories create todolist \
   --repository-format=docker \
   --location=asia-southeast1 \
   --description="Todo App container images"
@@ -61,21 +61,21 @@ cat ~/.docker/config.json | grep asia-southeast1
 
 # ── Backend ──────────────────────────────────────────────────────────────────
 docker tag todolist-backend:local \
-  asia-southeast1-docker.pkg.dev/PROJECT_ID/myapp/backend:v1.0
+  asia-southeast1-docker.pkg.dev/PROJECT_ID/todolist/backend:v1.0
 
 docker push \
-  asia-southeast1-docker.pkg.dev/PROJECT_ID/myapp/backend:v1.0
+  asia-southeast1-docker.pkg.dev/PROJECT_ID/todolist/backend:v1.0
 
 # ── Frontend ──────────────────────────────────────────────────────────────────
 docker tag todolist-frontend:local \
-  asia-southeast1-docker.pkg.dev/PROJECT_ID/myapp/frontend:v1.0
+  asia-southeast1-docker.pkg.dev/PROJECT_ID/todolist/frontend:v1.0
 
 docker push \
-  asia-southeast1-docker.pkg.dev/PROJECT_ID/myapp/frontend:v1.0
+  asia-southeast1-docker.pkg.dev/PROJECT_ID/todolist/frontend:v1.0
 
 # Verifikasi images sudah ter-push
 gcloud artifacts docker images list \
-  asia-southeast1-docker.pkg.dev/PROJECT_ID/myapp
+  asia-southeast1-docker.pkg.dev/PROJECT_ID/todolist
 ```
 
 ---
@@ -89,7 +89,7 @@ Edit `k8s/backend/deployment.yaml` — ubah baris `image`:
 image: your-registry/backend:latest
 
 # Sesudah (ganti PROJECT_ID):
-image: asia-southeast1-docker.pkg.dev/PROJECT_ID/myapp/backend:v1.0
+image: asia-southeast1-docker.pkg.dev/PROJECT_ID/todolist/backend:v1.0
 imagePullPolicy: Always
 ```
 
@@ -97,7 +97,7 @@ Edit `k8s/frontend/deployment.yaml`:
 
 ```yaml
 # Sesudah (ganti PROJECT_ID):
-image: asia-southeast1-docker.pkg.dev/PROJECT_ID/myapp/frontend:v1.0
+image: asia-southeast1-docker.pkg.dev/PROJECT_ID/todolist/frontend:v1.0
 imagePullPolicy: Always
 ```
 
@@ -109,18 +109,18 @@ imagePullPolicy: Always
 
 ```bash
 # Buat cluster GKE Autopilot (direkomendasikan, lebih mudah dikelola)
-gcloud container clusters create-auto myapp-cluster \
+gcloud container clusters create-auto todolist-cluster \
   --location=asia-southeast1
 
 # Atau buat cluster GKE Standard (lebih banyak kontrol)
-gcloud container clusters create myapp-cluster \
+gcloud container clusters create todolist-cluster \
   --zone=asia-southeast1-a \
   --num-nodes=2 \
   --machine-type=e2-medium \
   --disk-size=20GB
 
 # Setelah cluster dibuat, konfigurasi kubectl
-gcloud container clusters get-credentials myapp-cluster \
+gcloud container clusters get-credentials todolist-cluster \
   --location=asia-southeast1
 
 # Verifikasi koneksi
@@ -159,37 +159,37 @@ Sama seperti deploy lokal, tapi tanpa step "load image":
 
 ```bash
 # Buat namespace
-kubectl create namespace myapp
+kubectl create namespace todolist
 
 # Buat Secrets
 kubectl create secret generic backend-secret \
   --from-literal=DB_USER=todouser \
   --from-literal=DB_PASS=P@ssw0rd123! \
-  -n myapp
+  -n todolist
 
 kubectl create secret generic postgres-secret \
   --from-literal=POSTGRES_USER=todouser \
   --from-literal=POSTGRES_PASSWORD=P@ssw0rd123! \
   --from-literal=POSTGRES_DB=tododb \
-  -n myapp
+  -n todolist
 
 kubectl create configmap backend-config \
   --from-literal=DB_HOST=postgres \
   --from-literal=DB_PORT=5432 \
   --from-literal=DB_NAME=tododb \
-  -n myapp
+  -n todolist
 
 # Deploy semua resources
-kubectl apply -f k8s/database/ -n myapp
-kubectl wait --for=condition=ready pod -l app=postgres -n myapp --timeout=120s
+kubectl apply -f k8s/database/ -n todolist
+kubectl wait --for=condition=ready pod -l app=postgres -n todolist --timeout=120s
 
-kubectl apply -f k8s/backend/ -n myapp
-kubectl wait --for=condition=ready pod -l app=backend -n myapp --timeout=60s
+kubectl apply -f k8s/backend/ -n todolist
+kubectl wait --for=condition=ready pod -l app=backend -n todolist --timeout=60s
 
-kubectl apply -f k8s/frontend/ -n myapp
-kubectl wait --for=condition=ready pod -l app=frontend -n myapp --timeout=60s
+kubectl apply -f k8s/frontend/ -n todolist
+kubectl wait --for=condition=ready pod -l app=frontend -n todolist --timeout=60s
 
-kubectl apply -f k8s/ingress/ -n myapp
+kubectl apply -f k8s/ingress/ -n todolist
 ```
 
 ---
@@ -217,14 +217,14 @@ open http://$EXTERNAL_IP
 
 ```bash
 # 1. Buat DNS A record yang mengarah ke EXTERNAL_IP
-#    Di domain registrar kamu: myapp.example.com → EXTERNAL_IP
+#    Di domain registrar kamu: todolist.example.com → EXTERNAL_IP
 
 # 2. Update ingress.yaml dengan domain kamu
 #    Ubah bagian rules:
-#    - host: myapp.example.com
+#    - host: todolist.example.com
 
 # 3. Apply ulang ingress
-kubectl apply -f k8s/ingress/ingress.yaml -n myapp
+kubectl apply -f k8s/ingress/ingress.yaml -n todolist
 
 # 4. (Opsional) Install cert-manager untuk HTTPS otomatis
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.14.0/cert-manager.yaml
@@ -237,17 +237,17 @@ kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manage
 
 ```bash
 # Hapus semua resource aplikasi
-kubectl delete namespace myapp
+kubectl delete namespace todolist
 
 # Hapus Ingress Controller (ini yang membuat Load Balancer berbayar!)
 helm uninstall ingress-nginx -n ingress-nginx
 
 # Hapus GKE cluster
-gcloud container clusters delete myapp-cluster \
+gcloud container clusters delete todolist-cluster \
   --location=asia-southeast1
 
 # Hapus Artifact Registry (opsional)
-gcloud artifacts repositories delete myapp \
+gcloud artifacts repositories delete todolist \
   --location=asia-southeast1
 ```
 

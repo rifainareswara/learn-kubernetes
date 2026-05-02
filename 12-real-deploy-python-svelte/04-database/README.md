@@ -31,7 +31,7 @@ postgres-0 ──restart──▶ postgres-0
 | Nama Pod | Random (pod-abc123) | Urutan (postgres-0, postgres-1) |
 | Storage | Baru setiap restart | Persistent, terhubung ke Pod yang sama |
 | Startup Order | Bersamaan | Berurutan (0, lalu 1, lalu 2) |
-| DNS stabil | Tidak | Ya (`postgres-0.postgres.myapp.svc.cluster.local`) |
+| DNS stabil | Tidak | Ya (`postgres-0.postgres.todolist.svc.cluster.local`) |
 
 ---
 
@@ -108,7 +108,7 @@ kubectl create secret generic postgres-secret \
   --from-literal=POSTGRES_USER=todouser \
   --from-literal=POSTGRES_PASSWORD=P@ssw0rd123! \
   --from-literal=POSTGRES_DB=tododb \
-  -n myapp
+  -n todolist
 ```
 
 ---
@@ -119,13 +119,13 @@ Setelah deploy, cek apakah PostgreSQL berjalan dengan benar:
 
 ```bash
 # Cek status Pod
-kubectl get pods -n myapp -l app=postgres
+kubectl get pods -n todolist -l app=postgres
 
 # Lihat logs inisialisasi database
-kubectl logs -n myapp postgres-0
+kubectl logs -n todolist postgres-0
 
 # Masuk ke database (untuk debug)
-kubectl exec -it postgres-0 -n myapp -- psql -U todouser -d tododb
+kubectl exec -it postgres-0 -n todolist -- psql -U todouser -d tododb
 
 # Di dalam psql, cek tabel yang sudah dibuat oleh FastAPI
 \dt
@@ -139,11 +139,11 @@ SELECT * FROM todos;
 
 ```bash
 # Backup database ke file
-kubectl exec -n myapp postgres-0 -- \
+kubectl exec -n todolist postgres-0 -- \
   pg_dump -U todouser tododb > backup.sql
 
 # Restore dari backup
-kubectl exec -i -n myapp postgres-0 -- \
+kubectl exec -i -n todolist postgres-0 -- \
   psql -U todouser tododb < backup.sql
 ```
 

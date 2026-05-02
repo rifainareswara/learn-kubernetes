@@ -9,7 +9,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
-  namespace: myapp        # Harus sama dengan namespace lainnya
+  namespace: todolist        # Harus sama dengan namespace lainnya
   labels:
     app: frontend
     tier: web
@@ -39,8 +39,8 @@ spec:
       containers:
         - name: frontend
           # GANTI dengan path image registry kamu
-          # Contoh GCR: asia-southeast1-docker.pkg.dev/PROJECT_ID/myapp/frontend:v1.0
-          # Contoh ECR: ACCOUNT_ID.dkr.ecr.ap-southeast-1.amazonaws.com/myapp/frontend:v1.0
+          # Contoh GCR: asia-southeast1-docker.pkg.dev/PROJECT_ID/todolist/frontend:v1.0
+          # Contoh ECR: ACCOUNT_ID.dkr.ecr.ap-southeast-1.amazonaws.com/todolist/frontend:v1.0
           image: your-registry/frontend:latest
           imagePullPolicy: Always
 

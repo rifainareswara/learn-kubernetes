@@ -14,10 +14,10 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: myapp-ingress
-  namespace: myapp
+  name: todolist-ingress
+  namespace: todolist
   labels:
-    app: myapp
+    app: todolist
   annotations:
     # Tentukan Ingress Controller yang digunakan
     kubernetes.io/ingress.class: "nginx"
@@ -52,7 +52,7 @@ spec:
     # Host: ganti dengan domain kamu di production
     # Untuk localhost/Minikube, biarkan host kosong atau gunakan "localhost"
     - host: ""  # Tanpa host: cocokkan semua hostname
-      # Untuk production: - host: myapp.example.com
+      # Untuk production: - host: todolist.example.com
       http:
         paths:
           # ── Path 1: Backend API ───────────────────────────────────────────
@@ -94,8 +94,8 @@ spec:
   #
   # tls:
   #   - hosts:
-  #       - myapp.example.com
-  #     secretName: myapp-tls-cert   # cert-manager akan membuat Secret ini secara otomatis
+  #       - todolist.example.com
+  #     secretName: todolist-tls-cert   # cert-manager akan membuat Secret ini secara otomatis
   #
   # Tambahkan annotation ini jika menggunakan cert-manager:
   # cert-manager.io/cluster-issuer: "letsencrypt-prod"

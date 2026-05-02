@@ -34,7 +34,7 @@ Alibaba Container Registry (ACR) tersedia dalam dua tier:
 Konfigurasi melalui Alibaba Cloud Console:
 1. Buka [cr.console.aliyun.com](https://cr.console.aliyun.com)
 2. Pilih region **Indonesia (Jakarta)** atau yang terdekat
-3. Buat **Namespace** baru (misalnya: `mycompany-myapp`)
+3. Buat **Namespace** baru (misalnya: `mycompany-todolist`)
 4. Buat **Repository** untuk `backend` dan `frontend`
 
 ### 1.2 Login Docker ke ACR
@@ -60,17 +60,17 @@ docker login \
 
 # ── Backend ──────────────────────────────────────────────────────────────────
 docker tag todolist-backend:local \
-  registry.cn-jakarta.aliyuncs.com/mycompany-myapp/backend:v1.0
+  registry.cn-jakarta.aliyuncs.com/mycompany-todolist/backend:v1.0
 
 docker push \
-  registry.cn-jakarta.aliyuncs.com/mycompany-myapp/backend:v1.0
+  registry.cn-jakarta.aliyuncs.com/mycompany-todolist/backend:v1.0
 
 # ── Frontend ──────────────────────────────────────────────────────────────────
 docker tag todolist-frontend:local \
-  registry.cn-jakarta.aliyuncs.com/mycompany-myapp/frontend:v1.0
+  registry.cn-jakarta.aliyuncs.com/mycompany-todolist/frontend:v1.0
 
 docker push \
-  registry.cn-jakarta.aliyuncs.com/mycompany-myapp/frontend:v1.0
+  registry.cn-jakarta.aliyuncs.com/mycompany-todolist/frontend:v1.0
 ```
 
 ---
@@ -80,14 +80,14 @@ docker push \
 Edit `k8s/backend/deployment.yaml`:
 
 ```yaml
-image: registry.cn-jakarta.aliyuncs.com/mycompany-myapp/backend:v1.0
+image: registry.cn-jakarta.aliyuncs.com/mycompany-todolist/backend:v1.0
 imagePullPolicy: Always
 ```
 
 Edit `k8s/frontend/deployment.yaml`:
 
 ```yaml
-image: registry.cn-jakarta.aliyuncs.com/mycompany-myapp/frontend:v1.0
+image: registry.cn-jakarta.aliyuncs.com/mycompany-todolist/frontend:v1.0
 imagePullPolicy: Always
 ```
 
@@ -100,7 +100,7 @@ kubectl create secret docker-registry acr-credentials \
   --docker-server=registry.cn-jakarta.aliyuncs.com \
   --docker-username=YOUR_ALIBABA_ACCOUNT_EMAIL \
   --docker-password=YOUR_CONSOLE_PASSWORD \
-  -n myapp
+  -n todolist
 ```
 
 Kemudian tambahkan di deployment.yaml:
@@ -111,7 +111,7 @@ spec:
     - name: acr-credentials
   containers:
     - name: backend
-      image: registry.cn-jakarta.aliyuncs.com/mycompany-myapp/backend:v1.0
+      image: registry.cn-jakarta.aliyuncs.com/mycompany-todolist/backend:v1.0
 ```
 
 ---
@@ -123,7 +123,7 @@ spec:
 1. Buka [cs.console.aliyun.com](https://cs.console.aliyun.com)
 2. Klik **Create Cluster** → **Standard Managed Cluster**
 3. Konfigurasi:
-   - **Cluster Name:** `myapp-cluster`
+   - **Cluster Name:** `todolist-cluster`
    - **Region:** Indonesia (Jakarta)
    - **Kubernetes Version:** 1.28+
    - **Node Type:** ecs.c6.xlarge (4 vCPU, 8 GB RAM) — minimum untuk belajar
@@ -180,37 +180,37 @@ kubectl get svc -n ingress-nginx -w
 
 ```bash
 # Buat namespace
-kubectl create namespace myapp
+kubectl create namespace todolist
 
 # Buat Secrets
 kubectl create secret generic backend-secret \
   --from-literal=DB_USER=todouser \
   --from-literal=DB_PASS=P@ssw0rd123! \
-  -n myapp
+  -n todolist
 
 kubectl create secret generic postgres-secret \
   --from-literal=POSTGRES_USER=todouser \
   --from-literal=POSTGRES_PASSWORD=P@ssw0rd123! \
   --from-literal=POSTGRES_DB=tododb \
-  -n myapp
+  -n todolist
 
 kubectl create configmap backend-config \
   --from-literal=DB_HOST=postgres \
   --from-literal=DB_PORT=5432 \
   --from-literal=DB_NAME=tododb \
-  -n myapp
+  -n todolist
 
 # Deploy semua resources
-kubectl apply -f k8s/database/ -n myapp
-kubectl wait --for=condition=ready pod -l app=postgres -n myapp --timeout=120s
+kubectl apply -f k8s/database/ -n todolist
+kubectl wait --for=condition=ready pod -l app=postgres -n todolist --timeout=120s
 
-kubectl apply -f k8s/backend/ -n myapp
-kubectl wait --for=condition=ready pod -l app=backend -n myapp --timeout=60s
+kubectl apply -f k8s/backend/ -n todolist
+kubectl wait --for=condition=ready pod -l app=backend -n todolist --timeout=60s
 
-kubectl apply -f k8s/frontend/ -n myapp
-kubectl wait --for=condition=ready pod -l app=frontend -n myapp --timeout=60s
+kubectl apply -f k8s/frontend/ -n todolist
+kubectl wait --for=condition=ready pod -l app=frontend -n todolist --timeout=60s
 
-kubectl apply -f k8s/ingress/ -n myapp
+kubectl apply -f k8s/ingress/ -n todolist
 ```
 
 ---
@@ -280,7 +280,7 @@ StorageClass yang tersedia di ACK:
 
 ```bash
 # Hapus aplikasi
-kubectl delete namespace myapp
+kubectl delete namespace todolist
 
 # Hapus Ingress Controller (ini yang membuat SLB berbayar!)
 helm uninstall ingress-nginx -n ingress-nginx

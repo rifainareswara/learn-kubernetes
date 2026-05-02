@@ -62,12 +62,12 @@ minikube image load todolist-backend:local
 minikube image load todolist-frontend:local
 
 # 3. Deploy semua
-kubectl create namespace myapp
-kubectl apply -f k8s/database/ -n myapp
-kubectl wait --for=condition=ready pod -l app=postgres -n myapp --timeout=90s
-kubectl apply -f k8s/backend/ -n myapp
-kubectl apply -f k8s/frontend/ -n myapp
-kubectl apply -f k8s/ingress/ -n myapp
+kubectl create namespace todolist
+kubectl apply -f k8s/database/ -n todolist
+kubectl wait --for=condition=ready pod -l app=postgres -n todolist --timeout=90s
+kubectl apply -f k8s/backend/ -n todolist
+kubectl apply -f k8s/frontend/ -n todolist
+kubectl apply -f k8s/ingress/ -n todolist
 
 # 4. Buka tunnel (di terminal terpisah)
 minikube tunnel

@@ -21,7 +21,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: postgres-data-postgres-0   # Nama yang cocok dengan format StatefulSet: {template}-{pod}
-  namespace: myapp
+  namespace: todolist
   labels:
     app: postgres
     tier: database

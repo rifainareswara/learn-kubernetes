@@ -12,13 +12,13 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgres
-  namespace: myapp
+  namespace: todolist
   labels:
     app: postgres
     tier: database
 spec:
   # Nama Service "headless" yang mengelola DNS untuk StatefulSet ini
-  # Membuat DNS entry: postgres-0.postgres.myapp.svc.cluster.local
+  # Membuat DNS entry: postgres-0.postgres.todolist.svc.cluster.local
   serviceName: postgres
 
   # Untuk development/learning: 1 replika sudah cukup

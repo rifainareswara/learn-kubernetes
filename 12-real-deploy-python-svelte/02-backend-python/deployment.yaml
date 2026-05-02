@@ -9,7 +9,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: backend
-  namespace: myapp  # Ganti dengan namespace kamu
+  namespace: todolist  # Ganti dengan namespace kamu
   labels:
     app: backend
     tier: api
@@ -44,8 +44,8 @@ spec:
       containers:
         - name: backend
           # GANTI dengan path image registry kamu
-          # Contoh GCR: asia-southeast1-docker.pkg.dev/PROJECT_ID/myapp/backend:v1.0
-          # Contoh ECR: ACCOUNT_ID.dkr.ecr.ap-southeast-1.amazonaws.com/myapp/backend:v1.0
+          # Contoh GCR: asia-southeast1-docker.pkg.dev/PROJECT_ID/todolist/backend:v1.0
+          # Contoh ECR: ACCOUNT_ID.dkr.ecr.ap-southeast-1.amazonaws.com/todolist/backend:v1.0
           # Contoh ACR: registry.cn-jakarta.aliyuncs.com/NAMESPACE/backend:v1.0
           image: your-registry/backend:latest
 

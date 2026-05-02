@@ -73,14 +73,14 @@ Karena frontend dan backend kita berjalan di domain yang sama (via Ingress), COR
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],          # Development: izinkan semua
-    # allow_origins=["https://myapp.com"],  # Production: spesifik
+    # allow_origins=["https://todolist.com"],  # Production: spesifik
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 ```
 
-> **Tips untuk Production:** Ganti `allow_origins=["*"]` dengan domain spesifik aplikasimu. Misalnya: `allow_origins=["https://myapp.com", "https://www.myapp.com"]`
+> **Tips untuk Production:** Ganti `allow_origins=["*"]` dengan domain spesifik aplikasimu. Misalnya: `allow_origins=["https://todolist.com", "https://www.todolist.com"]`
 
 ---
 
@@ -240,4 +240,4 @@ echo "dG9kb3VzZXI=" | base64 -d
 
 ---
 
-> **Tips:** Setelah membuat Secret, verifikasi nilainya dengan: `kubectl get secret backend-secret -n myapp -o jsonpath='{.data.DB_USER}' | base64 -d`
+> **Tips:** Setelah membuat Secret, verifikasi nilainya dengan: `kubectl get secret backend-secret -n todolist -o jsonpath='{.data.DB_USER}' | base64 -d`

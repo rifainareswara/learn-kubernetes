@@ -140,19 +140,19 @@ Setelah cert-manager siap, aktifkan bagian TLS di `ingress.yaml`.
 
 ```bash
 # Cek status Ingress
-kubectl get ingress -n myapp
+kubectl get ingress -n todolist
 
 # Detail Ingress (termasuk IP/hostname)
-kubectl describe ingress myapp-ingress -n myapp
+kubectl describe ingress todolist-ingress -n todolist
 
 # Cek Ingress Controller berjalan
 kubectl get pods -n ingress-nginx
 ```
 
-Output yang diharapkan dari `kubectl get ingress -n myapp`:
+Output yang diharapkan dari `kubectl get ingress -n todolist`:
 ```
 NAME             CLASS   HOSTS       ADDRESS        PORTS   AGE
-myapp-ingress    nginx   localhost   192.168.49.2   80      5m
+todolist-ingress    nginx   localhost   192.168.49.2   80      5m
 ```
 
 ### Test Routing

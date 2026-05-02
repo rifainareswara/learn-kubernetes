@@ -11,7 +11,7 @@
 # Simpan file ini di: .github/workflows/deploy.yaml
 #
 # Secrets yang harus dikonfigurasi di GitHub Repository Settings:
-# - REGISTRY_URL       : URL container registry (e.g. asia-southeast1-docker.pkg.dev/PROJECT/myapp)
+# - REGISTRY_URL       : URL container registry (e.g. asia-southeast1-docker.pkg.dev/PROJECT/todolist)
 # - REGISTRY_USERNAME  : Username untuk login ke registry
 # - REGISTRY_PASSWORD  : Password/token untuk login ke registry
 # - KUBE_CONFIG        : Isi file ~/.kube/config dalam format base64
@@ -219,7 +219,7 @@ jobs:
     # Environment GitHub Actions (untuk approval workflow jika diperlukan)
     environment:
       name: production
-      url: https://myapp.example.com  # Ganti dengan URL aplikasi kamu
+      url: https://todolist.example.com  # Ganti dengan URL aplikasi kamu
 
     steps:
       - name: Checkout kode repository
@@ -244,9 +244,9 @@ jobs:
           kubectl get nodes
 
       # ── Pastikan Namespace ada ─────────────────────────────────────────────
-      - name: Pastikan namespace myapp ada
+      - name: Pastikan namespace todolist ada
         run: |
-          kubectl create namespace myapp --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create namespace todolist --dry-run=client -o yaml | kubectl apply -f -
 
       # ── Update Secrets di Kubernetes ──────────────────────────────────────
       # Recreate secrets dengan nilai terbaru dari GitHub Secrets
@@ -256,7 +256,7 @@ jobs:
           kubectl create secret generic backend-secret \
             --from-literal=DB_USER=${{ secrets.DB_USER }} \
             --from-literal=DB_PASS=${{ secrets.DB_PASS }} \
-            -n myapp \
+            -n todolist \
             --dry-run=client -o yaml | kubectl apply -f -
 
           # Hapus dan buat ulang secret postgres
@@ -264,17 +264,17 @@ jobs:
             --from-literal=POSTGRES_USER=${{ secrets.DB_USER }} \
             --from-literal=POSTGRES_PASSWORD=${{ secrets.DB_PASS }} \
             --from-literal=POSTGRES_DB=tododb \
-            -n myapp \
+            -n todolist \
             --dry-run=client -o yaml | kubectl apply -f -
 
       # ── Deploy Database ────────────────────────────────────────────────────
       # (StatefulSet postgres — biasanya jarang berubah)
       - name: Apply database manifests
         run: |
-          kubectl apply -f k8s/database/ -n myapp
+          kubectl apply -f k8s/database/ -n todolist
 
           # Tunggu database ready (timeout 2 menit)
-          kubectl rollout status statefulset/postgres -n myapp --timeout=120s
+          kubectl rollout status statefulset/postgres -n todolist --timeout=120s
 
       # ── Update Image di Deployment ─────────────────────────────────────────
       # Gunakan image tag dari commit SHA yang baru saja di-build
@@ -284,7 +284,7 @@ jobs:
 
           kubectl set image deployment/backend \
             backend=${{ secrets.REGISTRY_URL }}/backend:${IMAGE_TAG} \
-            -n myapp
+            -n todolist
 
       - name: Update image frontend ke tag terbaru
         run: |
@@ -292,38 +292,38 @@ jobs:
 
           kubectl set image deployment/frontend \
             frontend=${{ secrets.REGISTRY_URL }}/frontend:${IMAGE_TAG} \
-            -n myapp
+            -n todolist
 
       # ── Apply Semua Manifests ──────────────────────────────────────────────
       # Apply ConfigMap, Service, Ingress yang mungkin berubah
       - name: Apply semua Kubernetes manifests
         run: |
-          kubectl apply -f k8s/backend/ -n myapp
-          kubectl apply -f k8s/frontend/ -n myapp
-          kubectl apply -f k8s/ingress/ -n myapp
+          kubectl apply -f k8s/backend/ -n todolist
+          kubectl apply -f k8s/frontend/ -n todolist
+          kubectl apply -f k8s/ingress/ -n todolist
 
       # ── Tunggu Rollout Selesai ─────────────────────────────────────────────
       - name: Tunggu backend rollout selesai
         run: |
-          kubectl rollout status deployment/backend -n myapp --timeout=300s
+          kubectl rollout status deployment/backend -n todolist --timeout=300s
 
       - name: Tunggu frontend rollout selesai
         run: |
-          kubectl rollout status deployment/frontend -n myapp --timeout=300s
+          kubectl rollout status deployment/frontend -n todolist --timeout=300s
 
       # ── Verifikasi Deployment ──────────────────────────────────────────────
       - name: Verifikasi semua Pod berjalan
         run: |
           echo "=== Status Pod ==="
-          kubectl get pods -n myapp
+          kubectl get pods -n todolist
 
           echo ""
           echo "=== Status Deployment ==="
-          kubectl get deployments -n myapp
+          kubectl get deployments -n todolist
 
           echo ""
           echo "=== Status Ingress ==="
-          kubectl get ingress -n myapp
+          kubectl get ingress -n todolist
 
       # ── Notifikasi (Opsional) ──────────────────────────────────────────────
       # Kirim notifikasi ke Slack jika deployment berhasil
@@ -343,7 +343,7 @@ jobs:
         if: failure()
         run: |
           echo "Deployment gagal! Melakukan rollback..."
-          kubectl rollout undo deployment/backend -n myapp
-          kubectl rollout undo deployment/frontend -n myapp
+          kubectl rollout undo deployment/backend -n todolist
+          kubectl rollout undo deployment/frontend -n todolist
           echo "Rollback selesai. Cek status Pod:"
-          kubectl get pods -n myapp
+          kubectl get pods -n todolist

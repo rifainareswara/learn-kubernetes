@@ -144,10 +144,10 @@ Ikuti urutan ini dengan tepat:
 
 ```bash
 # ── Step 4.1: Buat Namespace ─────────────────────────────────────────────────
-kubectl create namespace myapp
+kubectl create namespace todolist
 
 # Verifikasi namespace ada
-kubectl get namespace myapp
+kubectl get namespace todolist
 
 
 # ── Step 4.2: Buat Secrets ───────────────────────────────────────────────────
@@ -155,36 +155,36 @@ kubectl get namespace myapp
 kubectl create secret generic backend-secret \
   --from-literal=DB_USER=todouser \
   --from-literal=DB_PASS=P@ssw0rd123! \
-  -n myapp
+  -n todolist
 
 # Secret untuk PostgreSQL (inisialisasi database)
 kubectl create secret generic postgres-secret \
   --from-literal=POSTGRES_USER=todouser \
   --from-literal=POSTGRES_PASSWORD=P@ssw0rd123! \
   --from-literal=POSTGRES_DB=tododb \
-  -n myapp
+  -n todolist
 
 # Verifikasi secrets ada
-kubectl get secrets -n myapp
+kubectl get secrets -n todolist
 
 
 # ── Step 4.3: Apply ConfigMap ─────────────────────────────────────────────────
-kubectl apply -f k8s/backend/configmap-secret.yaml -n myapp
+kubectl apply -f k8s/backend/configmap-secret.yaml -n todolist
 # Hanya apply ConfigMap dari file ini, Secret sudah dibuat di atas
 # Atau buat ConfigMap terpisah:
 kubectl create configmap backend-config \
   --from-literal=DB_HOST=postgres \
   --from-literal=DB_PORT=5432 \
   --from-literal=DB_NAME=tododb \
-  -n myapp
+  -n todolist
 
 
 # ── Step 4.4: Deploy Database ─────────────────────────────────────────────────
-kubectl apply -f k8s/database/statefulset.yaml -n myapp
-kubectl apply -f k8s/database/service.yaml -n myapp
+kubectl apply -f k8s/database/statefulset.yaml -n todolist
+kubectl apply -f k8s/database/service.yaml -n todolist
 
 # Verifikasi database mulai berjalan
-kubectl get pods -n myapp -l app=postgres
+kubectl get pods -n todolist -l app=postgres
 # Output awal (mungkin masih Pending atau ContainerCreating):
 # NAME         READY   STATUS              RESTARTS   AGE
 # postgres-0   0/1     ContainerCreating   0          10s
@@ -194,30 +194,30 @@ kubectl get pods -n myapp -l app=postgres
 echo "Menunggu PostgreSQL siap..."
 kubectl wait --for=condition=ready pod \
   -l app=postgres \
-  -n myapp \
+  -n todolist \
   --timeout=120s
 
 # Jika berhasil:
 # pod/postgres-0 condition met
 
 # Lihat logs untuk memastikan inisialisasi selesai
-kubectl logs -n myapp postgres-0 | tail -5
+kubectl logs -n todolist postgres-0 | tail -5
 # Output yang diharapkan:
 # ...database system is ready to accept connections
 
 
 # ── Step 4.6: Deploy Backend ──────────────────────────────────────────────────
-kubectl apply -f k8s/backend/deployment.yaml -n myapp
-kubectl apply -f k8s/backend/service.yaml -n myapp
+kubectl apply -f k8s/backend/deployment.yaml -n todolist
+kubectl apply -f k8s/backend/service.yaml -n todolist
 
 # Tunggu backend ready
 kubectl wait --for=condition=ready pod \
   -l app=backend \
-  -n myapp \
+  -n todolist \
   --timeout=60s
 
 # Cek logs backend
-kubectl logs -n myapp -l app=backend --tail=10
+kubectl logs -n todolist -l app=backend --tail=10
 # Output yang diharapkan:
 # INFO:     Started server process [1]
 # INFO:     Waiting for application startup.
@@ -226,18 +226,18 @@ kubectl logs -n myapp -l app=backend --tail=10
 
 
 # ── Step 4.7: Deploy Frontend ─────────────────────────────────────────────────
-kubectl apply -f k8s/frontend/deployment.yaml -n myapp
-kubectl apply -f k8s/frontend/service.yaml -n myapp
+kubectl apply -f k8s/frontend/deployment.yaml -n todolist
+kubectl apply -f k8s/frontend/service.yaml -n todolist
 
 # Tunggu frontend ready
 kubectl wait --for=condition=ready pod \
   -l app=frontend \
-  -n myapp \
+  -n todolist \
   --timeout=60s
 
 
 # ── Step 4.8: Deploy Ingress ──────────────────────────────────────────────────
-kubectl apply -f k8s/ingress/ingress.yaml -n myapp
+kubectl apply -f k8s/ingress/ingress.yaml -n todolist
 ```
 
 ---
@@ -282,7 +282,7 @@ kubectl wait --namespace ingress-nginx \
 
 ```bash
 # ── Cek semua resource ────────────────────────────────────────────────────────
-kubectl get all -n myapp
+kubectl get all -n todolist
 
 # Output yang diharapkan:
 # NAME                            READY   STATUS    RESTARTS   AGE
@@ -306,10 +306,10 @@ kubectl get all -n myapp
 
 
 # ── Cek Ingress ───────────────────────────────────────────────────────────────
-kubectl get ingress -n myapp
+kubectl get ingress -n todolist
 # Output:
 # NAME             CLASS   HOSTS   ADDRESS        PORTS   AGE
-# myapp-ingress    nginx   *       192.168.49.2   80      3m
+# todolist-ingress    nginx   *       192.168.49.2   80      3m
 
 
 # ── Test API langsung ─────────────────────────────────────────────────────────
@@ -339,7 +339,7 @@ open http://localhost
 
 # Swagger API Docs (untuk test API)
 # (Perlu port-forward karena /docs tidak melalui Ingress)
-kubectl port-forward svc/backend 8000:8000 -n myapp
+kubectl port-forward svc/backend 8000:8000 -n todolist
 open http://localhost:8000/docs
 ```
 
@@ -351,13 +351,13 @@ open http://localhost:8000/docs
 
 ```bash
 # Cek event untuk melihat penyebab
-kubectl describe pod <nama-pod> -n myapp
+kubectl describe pod <nama-pod> -n todolist
 
 # Kemungkinan penyebab:
 # - Insufficient resources: naikkan resource request atau tambah Node
 # - Image tidak ditemukan: pastikan sudah load image ke cluster
 # - PVC tidak ter-bound: cek StorageClass tersedia
-kubectl get pvc -n myapp
+kubectl get pvc -n todolist
 kubectl get storageclass
 ```
 
@@ -365,30 +365,30 @@ kubectl get storageclass
 
 ```bash
 # Lihat logs Pod yang crash
-kubectl logs <nama-pod> -n myapp
-kubectl logs <nama-pod> -n myapp --previous  # Log dari run sebelumnya
+kubectl logs <nama-pod> -n todolist
+kubectl logs <nama-pod> -n todolist --previous  # Log dari run sebelumnya
 
 # Kemungkinan penyebab untuk backend:
 # - Tidak bisa koneksi ke database: cek Secret dan Service postgres
 # - Error import Python: cek requirements.txt dan Dockerfile
 
 # Debug dengan masuk ke container
-kubectl exec -it <nama-pod> -n myapp -- /bin/sh
+kubectl exec -it <nama-pod> -n todolist -- /bin/sh
 ```
 
 ### Backend tidak bisa koneksi ke database
 
 ```bash
 # Verifikasi Service postgres ada
-kubectl get svc postgres -n myapp
+kubectl get svc postgres -n todolist
 
 # Verifikasi Secret backend-secret ada dan benar
-kubectl get secret backend-secret -n myapp -o jsonpath='{.data.DB_USER}' | base64 -d
-kubectl get secret postgres-secret -n myapp -o jsonpath='{.data.POSTGRES_USER}' | base64 -d
+kubectl get secret backend-secret -n todolist -o jsonpath='{.data.DB_USER}' | base64 -d
+kubectl get secret postgres-secret -n todolist -o jsonpath='{.data.POSTGRES_USER}' | base64 -d
 # Kedua output harus sama!
 
 # Test koneksi dari dalam Pod backend
-kubectl exec -it deployment/backend -n myapp -- sh -c \
+kubectl exec -it deployment/backend -n todolist -- sh -c \
   "python -c \"import psycopg2; conn = psycopg2.connect(host='postgres', dbname='tododb', user='todouser', password='P@ssw0rd123!'); print('Koneksi berhasil!')\""
 ```
 
@@ -399,10 +399,10 @@ kubectl exec -it deployment/backend -n myapp -- sh -c \
 kubectl get pods -n ingress-nginx
 
 # Cek Ingress configuration
-kubectl describe ingress myapp-ingress -n myapp
+kubectl describe ingress todolist-ingress -n todolist
 
 # Cek Service endpoints
-kubectl get endpoints -n myapp
+kubectl get endpoints -n todolist
 
 # Cek logs Ingress Controller
 kubectl logs -n ingress-nginx -l app.kubernetes.io/component=controller --tail=20
@@ -415,7 +415,7 @@ kubectl logs -n ingress-nginx -l app.kubernetes.io/component=controller --tail=2
 curl -v http://localhost/api/health
 
 # Cek apakah backend menerima request
-kubectl logs -n myapp -l app=backend --tail=20
+kubectl logs -n todolist -l app=backend --tail=20
 
 # Pastikan path /api/ diteruskan dengan benar (bukan /api/api/)
 ```
@@ -427,12 +427,12 @@ kubectl logs -n myapp -l app=backend --tail=20
 Setelah selesai belajar, bersihkan resources:
 
 ```bash
-# Hapus semua resource dalam namespace myapp
-kubectl delete namespace myapp
+# Hapus semua resource dalam namespace todolist
+kubectl delete namespace todolist
 
 # Verifikasi namespace sudah terhapus
-kubectl get namespace myapp
-# Error from server (NotFound): namespaces "myapp" not found
+kubectl get namespace todolist
+# Error from server (NotFound): namespaces "todolist" not found
 
 # Hentikan Minikube tunnel (Ctrl+C di terminal tersebut)
 
@@ -445,12 +445,12 @@ docker rmi todolist-backend:local todolist-frontend:local
 
 ---
 
-> **Tips:** Gunakan `kubectl get events -n myapp --sort-by='.lastTimestamp'` untuk melihat urutan kejadian di namespace. Sangat berguna untuk debugging masalah yang terjadi saat startup.
+> **Tips:** Gunakan `kubectl get events -n todolist --sort-by='.lastTimestamp'` untuk melihat urutan kejadian di namespace. Sangat berguna untuk debugging masalah yang terjadi saat startup.
 
 > **Tips:** Buat alias untuk perintah yang sering digunakan:
 > ```bash
 > alias k='kubectl'
-> alias kn='kubectl -n myapp'
+> alias kn='kubectl -n todolist'
 > ```
 
 ---

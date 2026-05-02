@@ -35,12 +35,12 @@ Amazon Elastic Container Registry (ECR) adalah private container registry AWS.
 ```bash
 # Buat repository untuk backend
 aws ecr create-repository \
-  --repository-name myapp/backend \
+  --repository-name todolist/backend \
   --region $AWS_REGION
 
 # Buat repository untuk frontend
 aws ecr create-repository \
-  --repository-name myapp/frontend \
+  --repository-name todolist/frontend \
   --region $AWS_REGION
 
 # Lihat semua repository
@@ -64,21 +64,21 @@ aws ecr get-login-password --region $AWS_REGION | \
 ```bash
 # ── Backend ──────────────────────────────────────────────────────────────────
 docker tag todolist-backend:local \
-  $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp/backend:v1.0
+  $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/todolist/backend:v1.0
 
 docker push \
-  $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp/backend:v1.0
+  $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/todolist/backend:v1.0
 
 # ── Frontend ──────────────────────────────────────────────────────────────────
 docker tag todolist-frontend:local \
-  $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp/frontend:v1.0
+  $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/todolist/frontend:v1.0
 
 docker push \
-  $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp/frontend:v1.0
+  $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/todolist/frontend:v1.0
 
 # Verifikasi images
 aws ecr describe-images \
-  --repository-name myapp/backend \
+  --repository-name todolist/backend \
   --region $AWS_REGION
 ```
 
@@ -89,13 +89,13 @@ aws ecr describe-images \
 Edit `k8s/backend/deployment.yaml`:
 
 ```yaml
-image: 123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/myapp/backend:v1.0
+image: 123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/todolist/backend:v1.0
 ```
 
 Edit `k8s/frontend/deployment.yaml`:
 
 ```yaml
-image: 123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/myapp/frontend:v1.0
+image: 123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/todolist/frontend:v1.0
 ```
 
 > **Penting:** Di EKS, Node memerlukan IAM role yang memiliki permission `ecr:GetDownloadUrlForLayer`, `ecr:BatchGetImage`, dll untuk pull image dari ECR. Jika menggunakan `eksctl`, ini biasanya dikonfigurasi otomatis.
@@ -112,9 +112,9 @@ brew install weaveworks/tap/eksctl
 
 # Buat cluster EKS (proses ini memakan waktu 15-20 menit)
 eksctl create cluster \
-  --name myapp-cluster \
+  --name todolist-cluster \
   --region $AWS_REGION \
-  --nodegroup-name myapp-nodes \
+  --nodegroup-name todolist-nodes \
   --node-type t3.medium \
   --nodes 2 \
   --nodes-min 1 \
@@ -145,7 +145,7 @@ aws iam create-policy \
 
 # 4.2 Buat IAM Service Account
 eksctl create iamserviceaccount \
-  --cluster=myapp-cluster \
+  --cluster=todolist-cluster \
   --namespace=kube-system \
   --name=aws-load-balancer-controller \
   --role-name AmazonEKSLoadBalancerControllerRole \
@@ -159,7 +159,7 @@ helm repo update
 
 helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
   -n kube-system \
-  --set clusterName=myapp-cluster \
+  --set clusterName=todolist-cluster \
   --set serviceAccount.create=false \
   --set serviceAccount.name=aws-load-balancer-controller
 
@@ -192,36 +192,36 @@ kubectl get svc -n ingress-nginx -w
 
 ```bash
 # Buat namespace dan secrets
-kubectl create namespace myapp
+kubectl create namespace todolist
 
 kubectl create secret generic backend-secret \
   --from-literal=DB_USER=todouser \
   --from-literal=DB_PASS=P@ssw0rd123! \
-  -n myapp
+  -n todolist
 
 kubectl create secret generic postgres-secret \
   --from-literal=POSTGRES_USER=todouser \
   --from-literal=POSTGRES_PASSWORD=P@ssw0rd123! \
   --from-literal=POSTGRES_DB=tododb \
-  -n myapp
+  -n todolist
 
 kubectl create configmap backend-config \
   --from-literal=DB_HOST=postgres \
   --from-literal=DB_PORT=5432 \
   --from-literal=DB_NAME=tododb \
-  -n myapp
+  -n todolist
 
 # Deploy
-kubectl apply -f k8s/database/ -n myapp
-kubectl wait --for=condition=ready pod -l app=postgres -n myapp --timeout=120s
+kubectl apply -f k8s/database/ -n todolist
+kubectl wait --for=condition=ready pod -l app=postgres -n todolist --timeout=120s
 
-kubectl apply -f k8s/backend/ -n myapp
-kubectl wait --for=condition=ready pod -l app=backend -n myapp --timeout=60s
+kubectl apply -f k8s/backend/ -n todolist
+kubectl wait --for=condition=ready pod -l app=backend -n todolist --timeout=60s
 
-kubectl apply -f k8s/frontend/ -n myapp
-kubectl wait --for=condition=ready pod -l app=frontend -n myapp --timeout=60s
+kubectl apply -f k8s/frontend/ -n todolist
+kubectl wait --for=condition=ready pod -l app=frontend -n todolist --timeout=60s
 
-kubectl apply -f k8s/ingress/ -n myapp
+kubectl apply -f k8s/ingress/ -n todolist
 ```
 
 ---
@@ -251,7 +251,7 @@ Untuk production, disarankan menggunakan **Amazon RDS** untuk PostgreSQL alih-al
 ```bash
 # Buat RDS PostgreSQL instance
 aws rds create-db-instance \
-  --db-instance-identifier myapp-postgres \
+  --db-instance-identifier todolist-postgres \
   --db-instance-class db.t3.micro \
   --engine postgres \
   --engine-version 16.1 \
@@ -265,7 +265,7 @@ aws rds create-db-instance \
 
 # Setelah RDS ready (5-10 menit), ambil endpoint
 aws rds describe-db-instances \
-  --db-instance-identifier myapp-postgres \
+  --db-instance-identifier todolist-postgres \
   --query 'DBInstances[0].Endpoint.Address' \
   --output text
 ```
@@ -278,21 +278,21 @@ Update `DB_HOST` di ConfigMap dengan endpoint RDS dan hapus StatefulSet PostgreS
 
 ```bash
 # Hapus aplikasi
-kubectl delete namespace myapp
+kubectl delete namespace todolist
 
 # Hapus Ingress Controller dan Load Balancer
 helm uninstall ingress-nginx -n ingress-nginx
 
 # Hapus EKS cluster (ini bisa memakan waktu 10-15 menit)
-eksctl delete cluster --name myapp-cluster --region $AWS_REGION
+eksctl delete cluster --name todolist-cluster --region $AWS_REGION
 
 # Hapus ECR repositories (jika tidak diperlukan)
-aws ecr delete-repository --repository-name myapp/backend --force --region $AWS_REGION
-aws ecr delete-repository --repository-name myapp/frontend --force --region $AWS_REGION
+aws ecr delete-repository --repository-name todolist/backend --force --region $AWS_REGION
+aws ecr delete-repository --repository-name todolist/frontend --force --region $AWS_REGION
 
 # Hapus RDS (jika dibuat)
 aws rds delete-db-instance \
-  --db-instance-identifier myapp-postgres \
+  --db-instance-identifier todolist-postgres \
   --skip-final-snapshot
 ```
 

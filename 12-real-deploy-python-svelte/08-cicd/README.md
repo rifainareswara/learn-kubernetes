@@ -50,7 +50,7 @@ Masuk ke: **Repository** → **Settings** → **Secrets and variables** → **Ac
 
 | Secret Name | Keterangan | Contoh Nilai |
 |---|---|---|
-| `REGISTRY_URL` | URL container registry | `asia-southeast1-docker.pkg.dev/project-id/myapp` |
+| `REGISTRY_URL` | URL container registry | `asia-southeast1-docker.pkg.dev/project-id/todolist` |
 | `REGISTRY_USERNAME` | Username registry (jika diperlukan) | `_json_key` (untuk GCR) atau `AWS` (untuk ECR) |
 | `REGISTRY_PASSWORD` | Password/token registry | Service account JSON atau ECR token |
 | `KUBE_CONFIG` | Kubeconfig dalam format base64 | `$(cat ~/.kube/config \| base64)` |

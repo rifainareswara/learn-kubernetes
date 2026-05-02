@@ -58,8 +58,8 @@ Terlepas dari cloud provider yang digunakan, langkah dasarnya sama:
 
 ```bash
 # Pisahkan environment dengan namespace
-kubectl create namespace myapp-production
-kubectl create namespace myapp-staging
+kubectl create namespace todolist-production
+kubectl create namespace todolist-staging
 ```
 
 ### 2. Resource Requests dan Limits Selalu Ada

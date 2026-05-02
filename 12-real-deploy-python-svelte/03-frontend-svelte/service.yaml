@@ -12,7 +12,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: frontend          # Nama service ini — digunakan sebagai DNS di dalam cluster
-  namespace: myapp        # Harus sama dengan namespace Deployment
+  namespace: todolist        # Harus sama dengan namespace Deployment
   labels:
     app: frontend
     tier: web
