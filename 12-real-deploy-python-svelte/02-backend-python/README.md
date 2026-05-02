@@ -95,43 +95,119 @@ app.add_middleware(
 
 ---
 
-## Cara Build Docker Image
+## Cara Build & Test Lokal
 
 > [!NOTE]
 > Semua perintah di bawah dijalankan dari **root folder project kamu** (`my-todo-app/`).
 > Jika ingin langsung mencoba dengan kode referensi yang sudah ada, gunakan:
 > `cd /path/ke/repo/12-real-deploy-python-svelte/app`
 
+### Cara 1 — Cepat: Pakai Docker Compose (Direkomendasikan)
+
+Docker Compose menjalankan PostgreSQL + Backend + Frontend sekaligus dengan urutan yang benar:
+
 ```bash
-# Pastikan kamu berada di root project (my-todo-app/ atau app/)
-pwd
-# Output yang diharapkan: .../my-todo-app  ATAU  .../app
+# Dari root project (yang ada docker-compose.yml)
+docker compose up --build
+```
 
-# Masuk ke folder backend
-cd backend/
+Setelah semua service jalan:
+- Backend API: http://localhost:8000
+- Swagger docs: http://localhost:8000/docs
+- Frontend: http://localhost:80
 
-# Build image
-docker build -t backend:local .
+```bash
+# Hentikan semua service
+docker compose down
+
+# Hentikan + hapus data database
+docker compose down -v
+```
+
+---
+
+### Cara 2 — Manual: Jalankan Satu per Satu
+
+Gunakan cara ini jika ingin memahami bagaimana setiap komponen bekerja secara terpisah.
+
+**Step 1: Build image backend**
+
+```bash
+# Dari root project
+docker build -t backend:local -f backend/Dockerfile backend/
 
 # Verifikasi image berhasil dibuat
 docker images | grep backend
+```
 
-# Test jalankan secara lokal (butuh PostgreSQL berjalan)
-docker run -p 8000:8000 \
-  -e DB_HOST=host.docker.internal \
+**Step 2: Jalankan PostgreSQL dulu**
+
+Backend butuh database untuk bisa start. Jalankan PostgreSQL terlebih dahulu:
+
+```bash
+# Buat network khusus agar backend dan postgres bisa saling komunikasi
+docker network create todoapp-net
+
+# Jalankan PostgreSQL
+docker run -d \
+  --name postgres-local \
+  --network todoapp-net \
+  -e POSTGRES_DB=tododb \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -p 5432:5432 \
+  postgres:16-alpine
+
+# Tunggu PostgreSQL siap (biasanya 3-5 detik)
+sleep 5
+
+# Verifikasi PostgreSQL berjalan
+docker ps | grep postgres-local
+```
+
+**Step 3: Jalankan backend**
+
+```bash
+docker run -d \
+  --name backend-local \
+  --network todoapp-net \
+  -p 8000:8000 \
+  -e DB_HOST=postgres-local \
   -e DB_PORT=5432 \
   -e DB_NAME=tododb \
   -e DB_USER=postgres \
   -e DB_PASS=postgres \
   backend:local
 
+# Verifikasi backend berjalan
+docker ps | grep backend-local
+```
+
+**Step 4: Test**
+
+```bash
 # Cek health endpoint
 curl http://localhost:8000/health
 # Output: {"status":"healthy","service":"todo-backend"}
 
-# Cek Swagger docs
+# Buka Swagger docs
 open http://localhost:8000/docs
 ```
+
+**Cleanup setelah selesai:**
+
+```bash
+docker stop backend-local postgres-local
+docker rm backend-local postgres-local
+docker network rm todoapp-net
+```
+
+> [!TIP]
+> Perhatikan perbedaan `DB_HOST` antara dua cara:
+> - **Docker Compose**: `DB_HOST=postgres` (nama service di compose)
+> - **Manual**: `DB_HOST=postgres-local` (nama container yang kamu buat)
+>
+> Di Kubernetes nanti, `DB_HOST` diisi nama **Service** PostgreSQL, bukan IP address.
 
 ---
 

@@ -39,21 +39,23 @@ ls
 # Output yang diharapkan: backend/  frontend/  docker-compose.yml
 ```
 
+Semua perintah build di bawah **dijalankan dari folder ini** (tidak perlu `cd` masuk-keluar):
+
 ```bash
 # ── Build Backend (FastAPI) ───────────────────────────────────────────────────
-cd backend/
-docker build -t backend:local .
-cd ..
+docker build -t backend:local -f backend/Dockerfile backend/
 
 # Verifikasi image berhasil dibuat
 docker images | grep backend
 # Output:
 # backend   local   abc123def456   2 minutes ago   158MB
 
+
 # ── Build Frontend (Svelte) ──────────────────────────────────────────────────
-cd frontend/
-docker build --build-arg VITE_API_URL=/api -t frontend:local .
-cd ..
+docker build \
+  --build-arg VITE_API_URL=/api \
+  -t frontend:local \
+  -f frontend/Dockerfile frontend/
 
 # Verifikasi
 docker images | grep frontend
@@ -61,7 +63,8 @@ docker images | grep frontend
 # frontend  local   def456abc123   1 minute ago    27MB
 ```
 
-> **Tips:** Flag `--build-arg VITE_API_URL=/api` mengset URL API menjadi `/api`. Di Kubernetes, Ingress akan meneruskan request `/api/*` ke backend FastAPI secara otomatis.
+> [!TIP]
+> Flag `-f backend/Dockerfile backend/` artinya: gunakan Dockerfile dari `backend/`, dan set build context ke folder `backend/`. Cara ini lebih aman karena kamu tidak perlu bolak-balik `cd` masuk/keluar folder.
 
 ---
 
