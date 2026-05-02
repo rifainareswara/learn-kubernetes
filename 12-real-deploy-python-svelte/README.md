@@ -90,6 +90,25 @@ Setelah menyelesaikan modul ini, kamu akan mampu:
 ```
 12-real-deploy-python-svelte/
 ├── README.md                    ← Kamu ada di sini
+├── app/                         ← Kode aplikasi yang bisa langsung dijalankan
+│   ├── docker-compose.yml       ← Jalankan semua sekaligus (tanpa Kubernetes)
+│   ├── backend/                 ← Kode Python FastAPI
+│   │   ├── main.py              ← CRUD todos (siap pakai)
+│   │   ├── requirements.txt
+│   │   ├── .env.example         ← Template environment variable
+│   │   └── Dockerfile
+│   └── frontend/                ← Kode Svelte
+│       ├── public/              ← Static assets
+│       ├── src/
+│       │   ├── App.svelte       ← UI todo (tambah, centang, hapus)
+│       │   ├── main.js          ← Entry point Svelte
+│       │   └── lib/
+│       │       └── api.js       ← Helper fetch ke backend
+│       ├── index.html
+│       ├── vite.config.js
+│       ├── package.json
+│       ├── nginx.conf           ← Konfigurasi Nginx untuk serve SPA
+│       └── Dockerfile
 ├── 01-persiapan/                ← Persiapan & struktur project
 ├── 02-backend-python/           ← Dockerize & deploy FastAPI
 ├── 03-frontend-svelte/          ← Dockerize & deploy Svelte
