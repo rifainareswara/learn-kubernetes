@@ -110,7 +110,7 @@ jobs:
         if: matrix.component == 'frontend'
         run: |
           cd frontend
-          npm ci  # Instalasi bersih sesuai package-lock.json
+          npm install  # Instalasi dependensi
 
       - name: Build check Svelte (cek tidak ada compile error)
         if: matrix.component == 'frontend'
