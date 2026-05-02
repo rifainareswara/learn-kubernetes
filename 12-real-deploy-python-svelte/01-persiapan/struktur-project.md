@@ -2,33 +2,54 @@
 
 > Dokumen ini menjelaskan struktur folder yang direkomendasikan dan kode aplikasi yang akan kita deploy.
 
+> [!IMPORTANT]
+> **Dua folder, dua tujuan berbeda:**
+>
+> | Folder | Letak | Tujuan |
+> |---|---|---|
+> | `my-todo-app/` | Di **komputer kamu** (luar repo) | Project yang kamu buat sendiri saat praktik |
+> | `app/` | Di **repo ini** (`12-real-deploy-python-svelte/app/`) | Kode referensi lengkap — bisa langsung dijalankan |
+>
+> Saat belajar, kamu akan **membangun `my-todo-app/` dari awal** sambil merujuk ke `app/` jika butuh contoh lengkap. Anggap `app/` sebagai *answer key* — lihat setelah mencoba sendiri.
+
 ---
 
 ## Struktur Monorepo yang Direkomendasikan
 
 Kita menggunakan pendekatan **monorepo** — semua kode (backend, frontend, kubernetes) berada dalam satu repository Git. Ini memudahkan pengelolaan versi dan deployment.
 
+Buat struktur ini di komputer kamu (di luar repo belajar ini):
+
+```bash
+# Buat folder project kamu
+mkdir -p my-todo-app/{backend,frontend/src/lib,frontend/public,k8s/{backend,frontend,database,ingress}}
+cd my-todo-app
 ```
-my-todo-app/
-├── backend/                    # Kode Python FastAPI
-│   ├── main.py                 # Entry point aplikasi
-│   ├── requirements.txt        # Dependensi Python
-│   └── Dockerfile              # Instruksi build Docker image
+
+Struktur lengkapnya akan terlihat seperti ini:
+
+```
+my-todo-app/                        ← Ini ada di komputer kamu (luar repo)
+├── backend/                        # Kode Python FastAPI
+│   ├── main.py                     # Entry point aplikasi
+│   ├── requirements.txt            # Dependensi Python
+│   ├── .env.example                # Template environment variable
+│   └── Dockerfile                  # Instruksi build Docker image
 │
-├── frontend/                   # Kode Svelte
+├── frontend/                       # Kode Svelte
 │   ├── src/
-│   │   ├── App.svelte          # Komponen utama
+│   │   ├── App.svelte              # Komponen utama
 │   │   ├── lib/
-│   │   │   └── api.js          # Helper untuk memanggil API
-│   │   └── main.js             # Entry point Svelte
+│   │   │   └── api.js             # Helper untuk memanggil API
+│   │   └── main.js                # Entry point Svelte
 │   ├── public/
 │   │   └── favicon.png
-│   ├── nginx.conf              # Konfigurasi nginx untuk production
+│   ├── nginx.conf                  # Konfigurasi nginx untuk production
 │   ├── package.json
 │   ├── vite.config.js
 │   └── Dockerfile
 │
-└── k8s/                        # Semua manifest Kubernetes
+└── k8s/                            # Semua manifest Kubernetes
     ├── backend/
     │   ├── deployment.yaml
     │   ├── service.yaml
@@ -43,6 +64,9 @@ my-todo-app/
     └── ingress/
         └── ingress.yaml
 ```
+
+> [!TIP]
+> Kode lengkap untuk semua file di atas sudah tersedia di [`../app/`](../app/) — gunakan sebagai referensi saat kamu mentok.
 
 ---
 
