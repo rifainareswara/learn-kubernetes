@@ -1,0 +1,154 @@
+# =============================================================================
+# CONTOH JOB KUBERNETES
+# =============================================================================
+# Job menjalankan Pod hingga selesai dengan sukses.
+# Berbeda dari Deployment yang berjalan terus-menerus.
+# =============================================================================
+
+# --- Job Sederhana ---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hello-job
+  namespace: default
+  labels:
+    app: hello
+    type: batch
+spec:
+  # Berapa kali Job harus berhasil diselesaikan
+  completions: 1           # Default: 1 (harus berhasil 1 kali)
+
+  # Berapa Pod bisa berjalan paralel
+  parallelism: 1           # Default: 1 (satu per satu)
+
+  # Berapa kali retry jika Pod gagal
+  backoffLimit: 3          # Default: 6
+
+  # Berapa lama Job boleh berjalan sebelum dibatalkan (detik)
+  activeDeadlineSeconds: 300   # 5 menit maksimal
+
+  # Berapa lama history Job disimpan setelah selesai (Kubernetes 1.21+)
+  # ttlSecondsAfterFinished: 3600   # Hapus Job 1 jam setelah selesai
+
+  template:
+    metadata:
+      labels:
+        app: hello
+        job-type: batch
+    spec:
+      # PENTING: restartPolicy untuk Job harus Never atau OnFailure
+      # Never: Buat Pod baru jika gagal (lebih aman, tapi lebih banyak Pod history)
+      # OnFailure: Restart container yang sama
+      restartPolicy: Never
+
+      containers:
+      - name: hello
+        image: busybox:1.36
+        command: ['sh', '-c', 'echo "Job berjalan!"; echo "Selesai dengan sukses!"; exit 0']
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
+
+---
+# --- Job Database Migration ---
+# Contoh realistis: jalankan database migration sebelum deploy aplikasi baru
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migration-job
+  labels:
+    app: my-app
+    type: migration
+spec:
+  completions: 1
+  backoffLimit: 2              # Coba 2 kali sebelum dianggap gagal
+  activeDeadlineSeconds: 600   # Maksimal 10 menit untuk migration
+
+  template:
+    metadata:
+      labels:
+        app: my-app
+        job-type: migration
+    spec:
+      restartPolicy: Never
+
+      # Init container: tunggu database ready
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.36
+        command: ['sh', '-c',
+          'until nc -z postgres-service 5432; do
+             echo "Menunggu database...";
+             sleep 2;
+           done;
+           echo "Database ready!"']
+
+      containers:
+      - name: migrator
+        image: node:18-alpine    # Atau image aplikasimu
+
+        # Command untuk menjalankan migration
+        command: ['sh', '-c',
+          'echo "Memulai database migration...";
+           # node migrate.js  ← uncomment dengan command migration kamu
+           echo "Migration berhasil!";
+           exit 0']
+
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: database_url
+        - name: NODE_ENV
+          value: "production"
+
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+---
+# --- Job Paralel: Proses Data di Banyak Pod Sekaligus ---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: parallel-processing-job
+  labels:
+    app: data-processor
+spec:
+  completions: 6           # Total 6 unit pekerjaan harus selesai
+  parallelism: 3           # Jalankan 3 Pod sekaligus
+  backoffLimit: 4
+
+  template:
+    metadata:
+      labels:
+        app: data-processor
+    spec:
+      restartPolicy: OnFailure
+
+      containers:
+      - name: processor
+        image: python:3.11-alpine
+        command: ['python', '-c',
+          'import os, time;
+           worker_id = os.environ.get("HOSTNAME", "unknown");
+           print(f"Worker {worker_id} memproses data...");
+           time.sleep(10);  # Simulasi pemrosesan
+           print(f"Worker {worker_id} selesai!");']
+
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "200m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"

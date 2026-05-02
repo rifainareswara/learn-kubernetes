@@ -1,0 +1,285 @@
+# =============================================================================
+# CONTOH STATEFULSET KUBERNETES
+# =============================================================================
+# StatefulSet untuk aplikasi yang butuh identitas stabil (database, queue, dll).
+# Setiap Pod punya: nama unik, storage sendiri, dan DNS yang stabil.
+# =============================================================================
+
+# =============================================================================
+# HEADLESS SERVICE - Wajib untuk StatefulSet
+# =============================================================================
+# Headless Service memberikan DNS individual untuk setiap Pod StatefulSet.
+# Tanpa ini, Pod StatefulSet tidak punya DNS yang stabil.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-headless            # Nama service untuk DNS internal
+  namespace: default
+  labels:
+    app: postgres
+spec:
+  type: ClusterIP
+  clusterIP: None                    # "None" = Headless Service!
+  selector:
+    app: postgres
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: 5432
+
+---
+# Service untuk akses normal ke PostgreSQL master (Pod pertama)
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  labels:
+    app: postgres
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+    role: primary                    # Hanya kirim ke Pod master
+  ports:
+  - port: 5432
+    targetPort: 5432
+
+---
+# =============================================================================
+# STATEFULSET: PostgreSQL
+# =============================================================================
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: default
+  labels:
+    app: postgres
+spec:
+  serviceName: postgres-headless     # WAJIB: nama headless service di atas
+  replicas: 3                        # 1 master + 2 replica (sesuaikan kebutuhan)
+
+  selector:
+    matchLabels:
+      app: postgres
+
+  # Update strategy untuk StatefulSet
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0             # Update mulai dari index ini (0 = semua)
+                               # partition: 1 = hanya update Pod-1, Pod-2, dst.
+                               # Pod-0 (master) tidak diupdate - untuk keamanan
+
+  # podManagementPolicy menentukan urutan start/stop
+  podManagementPolicy: OrderedReady  # Default: start berurutan, stop terbalik
+  # podManagementPolicy: Parallel    # Start dan stop semua sekaligus (lebih cepat)
+
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      terminationGracePeriodSeconds: 60   # Beri waktu lebih untuk shutdown graceful
+
+      # Init container untuk setup replikasi
+      initContainers:
+      - name: init-postgres
+        image: postgres:15-alpine
+        command:
+        - bash
+        - -c
+        - |
+          # Tentukan apakah ini primary (Pod-0) atau replica
+          if [[ $HOSTNAME == *-0 ]]; then
+            echo "Ini adalah primary PostgreSQL"
+            echo "role=primary" > /etc/postgres-role/role
+          else
+            echo "Ini adalah replica PostgreSQL"
+            echo "role=replica" > /etc/postgres-role/role
+          fi
+        volumeMounts:
+        - name: role-config
+          mountPath: /etc/postgres-role
+
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+
+        ports:
+        - name: postgres
+          containerPort: 5432
+
+        env:
+        - name: POSTGRES_DB
+          value: "myappdb"
+        - name: POSTGRES_USER
+          value: "appuser"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: password
+        - name: POSTGRES_REPLICATION_USER
+          value: "replicator"
+        - name: POSTGRES_REPLICATION_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: replication_password
+        # Hostname Pod saat ini (untuk membedakan primary vs replica)
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+
+        volumeMounts:
+        - name: postgres-data          # Volume data (PVC per Pod)
+          mountPath: /var/lib/postgresql/data
+          subPath: postgres
+
+        - name: role-config
+          mountPath: /etc/postgres-role
+          readOnly: true
+
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1"
+
+        livenessProbe:
+          exec:
+            command: ["pg_isready", "-U", "appuser", "-d", "myappdb"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 5
+
+        readinessProbe:
+          exec:
+            command: ["pg_isready", "-U", "appuser", "-d", "myappdb"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+      volumes:
+      - name: role-config
+        emptyDir: {}
+
+  # volumeClaimTemplates: Buat PVC otomatis untuk SETIAP Pod!
+  # Pod postgres-0 → PVC postgres-data-postgres-0
+  # Pod postgres-1 → PVC postgres-data-postgres-1
+  # Pod postgres-2 → PVC postgres-data-postgres-2
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data              # Nama PVC = "postgres-data-<pod-name>"
+      labels:
+        app: postgres
+    spec:
+      storageClassName: standard       # Sesuaikan dengan cluster kamu
+      accessModes:
+        - ReadWriteOnce                # Setiap PVC hanya untuk 1 Pod
+      resources:
+        requests:
+          storage: 10Gi                # 10GB per Pod
+
+---
+# Secret untuk PostgreSQL
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+type: Opaque
+stringData:
+  password: "productionpassword123"         # Ganti dengan password kuat!
+  replication_password: "replpassword456"
+
+---
+# =============================================================================
+# CONTOH: StatefulSet Redis (Cache/Queue)
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-headless
+  labels:
+    app: redis
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    name: redis
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  labels:
+    app: redis
+spec:
+  serviceName: redis-headless
+  replicas: 3
+
+  selector:
+    matchLabels:
+      app: redis
+
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        command:
+        - redis-server
+        - /etc/redis/redis.conf
+
+        ports:
+        - containerPort: 6379
+          name: redis
+
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        - name: redis-config
+          mountPath: /etc/redis
+
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+
+        livenessProbe:
+          exec:
+            command: ["redis-cli", "ping"]
+          initialDelaySeconds: 15
+          periodSeconds: 10
+
+      volumes:
+      - name: redis-config
+        configMap:
+          name: redis-config
+
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-data
+    spec:
+      storageClassName: standard
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi

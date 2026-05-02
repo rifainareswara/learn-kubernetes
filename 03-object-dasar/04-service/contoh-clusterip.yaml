@@ -1,0 +1,96 @@
+# =============================================================================
+# SERVICE: CLUSTERIP
+# =============================================================================
+# ClusterIP adalah jenis Service default di Kubernetes.
+# Hanya bisa diakses dari DALAM cluster — tidak dari luar.
+# Cocok untuk komunikasi antar microservice.
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-clusterip-service
+  namespace: default
+  labels:
+    app: nginx
+    service-type: internal
+spec:
+  type: ClusterIP       # Jenis Service (default jika tidak disebutkan)
+
+  # Selector: Service akan meneruskan traffic ke Pod yang punya label ini
+  selector:
+    app: nginx          # Cocok dengan label Pod kita
+
+  # Ports: definisi port Service dan port target (Pod)
+  ports:
+  - name: http          # Nama port (opsional tapi disarankan)
+    port: 80            # Port Service yang diekspos ke dalam cluster
+    targetPort: 80      # Port di Pod yang menerima traffic
+    protocol: TCP
+
+---
+# --- Contoh ClusterIP dengan Multiple Ports ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: multi-port-service
+  labels:
+    app: multi-port-app
+spec:
+  type: ClusterIP
+  selector:
+    app: multi-port-app
+
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080    # App jalan di port 8080, Service ekspos di 80
+  - name: https
+    port: 443
+    targetPort: 8443
+  - name: metrics
+    port: 9090          # Port untuk Prometheus scraping
+    targetPort: 9090
+
+---
+# --- Contoh Headless Service ---
+# Headless Service tidak punya ClusterIP
+# Digunakan untuk StatefulSet atau custom service discovery
+apiVersion: v1
+kind: Service
+metadata:
+  name: headless-service
+  labels:
+    app: my-statefulset
+spec:
+  type: ClusterIP
+  clusterIP: None       # "None" = headless service (tidak ada ClusterIP)
+
+  selector:
+    app: my-statefulset
+
+  ports:
+  - port: 80
+    targetPort: 80
+
+# Dengan Headless Service, DNS query ke "headless-service" akan mengembalikan
+# IP dari semua Pod individual, bukan IP Service.
+# Berguna untuk StatefulSet agar Pod bisa diakses secara individual.
+
+---
+# --- Contoh ExternalName Service ---
+# Memetakan Service ke nama DNS eksternal
+# Berguna untuk akses database eksternal atau service di luar cluster
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-db
+  labels:
+    app: my-app
+spec:
+  type: ExternalName
+  externalName: my-database.example.com   # DNS name eksternal
+
+# Sekarang dari dalam cluster bisa akses:
+# external-db → my-database.example.com
+# Tanpa perlu tahu IP atau perubahan DNS eksternal

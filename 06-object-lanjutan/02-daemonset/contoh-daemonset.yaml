@@ -1,0 +1,191 @@
+# =============================================================================
+# CONTOH DAEMONSET KUBERNETES
+# =============================================================================
+# DaemonSet menjalankan satu Pod di SETIAP Node dalam cluster.
+# Cocok untuk log collector, monitoring agent, network plugin, dll.
+# =============================================================================
+
+# --- DaemonSet untuk Log Collector (Fluentd) ---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluentd-log-collector
+  namespace: kube-system          # DaemonSet sistem biasanya di kube-system
+  labels:
+    app: fluentd
+    component: log-collector
+spec:
+  selector:
+    matchLabels:
+      app: fluentd
+
+  # Update strategy
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1     # Update 1 Node pada satu waktu
+
+  template:
+    metadata:
+      labels:
+        app: fluentd
+        component: log-collector
+    spec:
+      # Service account untuk akses ke Kubernetes API (baca metadata Pod)
+      serviceAccountName: fluentd
+
+      # Tolerations: izinkan Pod berjalan di control plane Node juga
+      # (biasanya control plane punya taint "NoSchedule")
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+
+      containers:
+      - name: fluentd
+        image: fluent/fluentd-kubernetes-daemonset:v1.16-debian-elasticsearch8-1
+        env:
+        - name: FLUENT_ELASTICSEARCH_HOST
+          value: "elasticsearch-service.logging.svc.cluster.local"
+        - name: FLUENT_ELASTICSEARCH_PORT
+          value: "9200"
+        - name: FLUENTD_SYSTEMD_CONF
+          value: "disable"
+
+        resources:
+          limits:
+            memory: 200Mi
+            cpu: 100m
+          requests:
+            memory: 100Mi
+            cpu: 50m
+
+        # DaemonSet perlu akses ke log di Node host
+        volumeMounts:
+        - name: varlog             # Log sistem Linux
+          mountPath: /var/log
+        - name: varlibdockercontainers   # Log container Docker
+          mountPath: /var/lib/docker/containers
+          readOnly: true
+        - name: fluentd-config
+          mountPath: /fluentd/etc
+
+      # hostPath volume: akses direktori dari Node host
+      volumes:
+      - name: varlog
+        hostPath:
+          path: /var/log
+      - name: varlibdockercontainers
+        hostPath:
+          path: /var/lib/docker/containers
+      - name: fluentd-config
+        configMap:
+          name: fluentd-config
+
+---
+# --- DaemonSet untuk Node Exporter (Prometheus Monitoring) ---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter-ds
+  namespace: monitoring
+  labels:
+    app: node-exporter
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter
+
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+      annotations:
+        prometheus.io/scrape: "true"    # Prometheus akan scrape Pod ini
+        prometheus.io/port: "9100"      # Port metrics
+
+    spec:
+      # hostNetwork: true agar bisa akses metrics Node host
+      hostNetwork: true
+      hostPID: true               # Akses ke proses host (untuk node metrics)
+
+      tolerations:
+      - operator: Exists          # Tolerasi SEMUA taint (jalankan di setiap Node)
+
+      containers:
+      - name: node-exporter
+        image: prom/node-exporter:v1.6.1
+
+        args:
+        - '--path.procfs=/host/proc'
+        - '--path.sysfs=/host/sys'
+        - '--path.rootfs=/host/root'
+        - '--collector.filesystem.ignored-mount-points=^/(dev|proc|sys|var/lib/docker/.+)($|/)'
+
+        ports:
+        - containerPort: 9100
+          name: metrics
+          hostPort: 9100          # Ekspos di port host Node
+
+        resources:
+          limits:
+            memory: 100Mi
+            cpu: 100m
+          requests:
+            memory: 30Mi
+            cpu: 10m
+
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65534        # nobody user
+
+        volumeMounts:
+        - name: proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: sys
+          mountPath: /host/sys
+          readOnly: true
+        - name: root
+          mountPath: /host/root
+          mountPropagation: HostToContainer
+          readOnly: true
+
+      volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: root
+        hostPath:
+          path: /
+
+---
+# Service untuk Node Exporter (agar Prometheus bisa scrape)
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-exporter-service
+  namespace: monitoring
+  labels:
+    app: node-exporter
+spec:
+  type: ClusterIP
+  clusterIP: None               # Headless service
+  selector:
+    app: node-exporter
+  ports:
+  - name: metrics
+    port: 9100
+    targetPort: 9100

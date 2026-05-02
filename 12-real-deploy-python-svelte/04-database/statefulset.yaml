@@ -1,0 +1,144 @@
+# =============================================================================
+# StatefulSet untuk PostgreSQL
+# =============================================================================
+# StatefulSet digunakan untuk aplikasi "stateful" seperti database yang
+# memerlukan:
+# - Identitas Pod yang stabil dan persistent (nama tidak berubah saat restart)
+# - Storage yang terkait dengan Pod spesifik
+# - Urutan deployment dan scaling yang terprediksi
+# =============================================================================
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: myapp
+  labels:
+    app: postgres
+    tier: database
+spec:
+  # Nama Service "headless" yang mengelola DNS untuk StatefulSet ini
+  # Membuat DNS entry: postgres-0.postgres.myapp.svc.cluster.local
+  serviceName: postgres
+
+  # Untuk development/learning: 1 replika sudah cukup
+  # Untuk production: pertimbangkan menggunakan PostgreSQL operator untuk HA
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: postgres
+
+  template:
+    metadata:
+      labels:
+        app: postgres
+        tier: database
+    spec:
+      # Jika Node memiliki taint khusus untuk database, tambahkan tolerations
+      # tolerations:
+      #   - key: "database"
+      #     operator: "Equal"
+      #     value: "true"
+      #     effect: "NoSchedule"
+
+      # Pastikan database di-terminate dengan graceful (default 30 detik mungkin kurang)
+      terminationGracePeriodSeconds: 60
+
+      containers:
+        - name: postgres
+          # Gunakan versi Alpine untuk ukuran image yang lebih kecil
+          image: postgres:16-alpine
+
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+
+          # ── Environment Variables ────────────────────────────────────────────
+          # PostgreSQL Official Image mendukung konfigurasi via env vars:
+          # - POSTGRES_USER: membuat superuser dengan nama ini
+          # - POSTGRES_PASSWORD: password untuk superuser
+          # - POSTGRES_DB: membuat database dengan nama ini (jika tidak ada)
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret   # Secret khusus untuk PostgreSQL
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_DB
+            # Lokasi penyimpanan data (harus sesuai dengan volumeMount di bawah)
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+
+          # ── Volume Mount ─────────────────────────────────────────────────────
+          # Mount PVC ke direktori data PostgreSQL
+          # Pastikan subPath 'pgdata' digunakan untuk menghindari permission error
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+              # subPath: pgdata  # Uncomment jika mengalami "lost+found" permission error
+
+          # ── Resource Limits ──────────────────────────────────────────────────
+          # Database biasanya membutuhkan memory yang lebih besar dari app container
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+          # ── Readiness Probe ──────────────────────────────────────────────────
+          # Gunakan pg_isready untuk cek apakah PostgreSQL siap menerima koneksi
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - $(POSTGRES_USER)
+                - -d
+                - $(POSTGRES_DB)
+            initialDelaySeconds: 15    # PostgreSQL butuh waktu untuk inisialisasi
+            periodSeconds: 10
+            failureThreshold: 5        # Toleransi lebih tinggi untuk database
+            successThreshold: 1
+
+          # ── Liveness Probe ───────────────────────────────────────────────────
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - $(POSTGRES_USER)
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 5
+
+  # ── Volume Claim Templates ───────────────────────────────────────────────────
+  # StatefulSet akan membuat PVC untuk setiap Pod secara otomatis.
+  # Nama PVC yang dibuat: postgres-data-postgres-0
+  # (template_name-pod_name)
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+        labels:
+          app: postgres
+      spec:
+        accessModes:
+          - ReadWriteOnce   # Hanya bisa di-mount oleh satu Node sekaligus (cocok untuk database)
+        # storageClassName: standard  # Uncomment dan sesuaikan jika perlu StorageClass spesifik
+        # Di cloud: standard (GKE), gp2/gp3 (EKS), cloud_ssd (ACK)
+        resources:
+          requests:
+            storage: 5Gi    # Sesuaikan dengan kebutuhan data kamu

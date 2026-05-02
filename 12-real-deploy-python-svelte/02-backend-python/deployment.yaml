@@ -1,0 +1,130 @@
+# =============================================================================
+# Kubernetes Deployment untuk Backend FastAPI
+# =============================================================================
+# Deployment mengelola Pod lifecycle: membuat, memperbarui, dan memulihkan
+# Pod secara otomatis jika ada yang crash atau node bermasalah.
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: myapp  # Ganti dengan namespace kamu
+  labels:
+    app: backend
+    tier: api
+    version: "1.0"
+spec:
+  # Jalankan 2 replika untuk high availability
+  # Jika satu Pod crash, satu Pod lain masih melayani traffic
+  replicas: 2
+
+  # Selector: Deployment akan mengelola Pod dengan label ini
+  selector:
+    matchLabels:
+      app: backend
+
+  # Strategi update: RollingUpdate memastikan tidak ada downtime saat update
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1   # Maksimal 1 Pod tidak tersedia saat update
+      maxSurge: 1         # Maksimal 1 Pod ekstra saat update
+
+  template:
+    metadata:
+      labels:
+        app: backend
+        tier: api
+    spec:
+      # Jika image pull dari private registry, tambahkan imagePullSecrets di sini
+      # imagePullSecrets:
+      #   - name: registry-credentials
+
+      containers:
+        - name: backend
+          # GANTI dengan path image registry kamu
+          # Contoh GCR: asia-southeast1-docker.pkg.dev/PROJECT_ID/myapp/backend:v1.0
+          # Contoh ECR: ACCOUNT_ID.dkr.ecr.ap-southeast-1.amazonaws.com/myapp/backend:v1.0
+          # Contoh ACR: registry.cn-jakarta.aliyuncs.com/NAMESPACE/backend:v1.0
+          image: your-registry/backend:latest
+
+          # imagePullPolicy:
+          # - Always: selalu pull dari registry (baik untuk production)
+          # - IfNotPresent: pakai local jika ada (untuk development lokal)
+          # - Never: jangan pull, harus ada secara lokal (untuk Kind/Minikube load)
+          imagePullPolicy: Always
+
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+
+          # ── Environment Variables ────────────────────────────────────────────
+          # Data non-sensitif dari ConfigMap
+          env:
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: DB_PORT
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: DB_NAME
+            # Data sensitif dari Secret
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secret
+                  key: DB_USER
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secret
+                  key: DB_PASS
+
+          # ── Resource Limits ──────────────────────────────────────────────────
+          # Selalu set resource requests dan limits di production!
+          # - requests: resource yang "dipesan" (digunakan untuk scheduling)
+          # - limits: batas maksimum yang boleh digunakan
+          resources:
+            requests:
+              cpu: 100m       # 100 millicores = 0.1 CPU core
+              memory: 128Mi   # 128 Mebibytes
+            limits:
+              cpu: 250m       # 250 millicores = 0.25 CPU core
+              memory: 256Mi   # 256 Mebibytes
+
+          # ── Readiness Probe ──────────────────────────────────────────────────
+          # Kubernetes akan menunggu probe ini berhasil sebelum mengirim traffic ke Pod.
+          # Jika gagal, Pod dikeluarkan dari load balancer (tapi TIDAK di-restart).
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10   # Tunggu 10 detik setelah container start
+            periodSeconds: 10          # Cek setiap 10 detik
+            failureThreshold: 3        # Gagal 3x berturut-turut = Pod not ready
+            successThreshold: 1        # Berhasil 1x = Pod ready
+
+          # ── Liveness Probe ───────────────────────────────────────────────────
+          # Jika probe ini gagal, Kubernetes akan me-restart container.
+          # Berguna untuk mendeteksi deadlock atau kondisi hang.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30   # Berikan waktu lebih lama untuk startup
+            periodSeconds: 30          # Cek setiap 30 detik
+            failureThreshold: 3        # Gagal 3x berturut-turut = restart container
+            timeoutSeconds: 5          # Timeout per probe request
+
+      # Restart policy untuk Pod (default: Always, cocok untuk web service)
+      restartPolicy: Always

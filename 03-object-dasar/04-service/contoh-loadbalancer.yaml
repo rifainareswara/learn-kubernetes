@@ -1,0 +1,100 @@
+# =============================================================================
+# SERVICE: LOADBALANCER
+# =============================================================================
+# LoadBalancer membuat external load balancer di cloud provider.
+# Cloud provider akan assign IP publik yang bisa diakses dari internet.
+# Di lokal (Minikube/Kind), IP external akan "Pending" kecuali pakai MetalLB.
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-loadbalancer
+  namespace: default
+  labels:
+    app: nginx
+    service-type: loadbalancer
+  # Annotations untuk konfigurasi cloud-specific
+  # Contoh untuk AWS EKS:
+  # annotations:
+  #   service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+  #   service.beta.kubernetes.io/aws-load-balancer-internal: "false"
+  #
+  # Contoh untuk GKE:
+  # annotations:
+  #   cloud.google.com/load-balancer-type: "External"
+  #   networking.gke.io/load-balancer-ip: "34.x.x.x"  # IP statis
+spec:
+  type: LoadBalancer
+
+  selector:
+    app: nginx
+
+  ports:
+  - name: http
+    port: 80            # Port eksternal (internet → load balancer)
+    targetPort: 80      # Port di Pod
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 443
+    protocol: TCP
+
+  # Session affinity: pastikan request dari client yang sama ke Pod yang sama
+  # sessionAffinity: ClientIP
+  # sessionAffinityConfig:
+  #   clientIP:
+  #     timeoutSeconds: 3600
+
+# Setelah dibuat, cek EXTERNAL-IP:
+# kubectl get service nginx-loadbalancer
+# NAME               TYPE           CLUSTER-IP    EXTERNAL-IP     PORT(S)
+# nginx-loadbalancer LoadBalancer   10.96.10.1    34.x.x.x        80:30080/TCP
+#
+# Di Minikube, EXTERNAL-IP akan "Pending" sampai minikube tunnel dijalankan:
+# minikube tunnel  (jalankan di terminal terpisah)
+
+---
+# --- LoadBalancer dengan Annotations AWS EKS ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-loadbalancer-aws
+  labels:
+    app: web
+  annotations:
+    # Gunakan Network Load Balancer (NLB) di AWS
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    # Ekspos ke internet (bukan internal)
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    # Alokasikan IP per Availability Zone
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+spec:
+  type: LoadBalancer
+  selector:
+    app: web
+  ports:
+  - port: 80
+    targetPort: 8080
+
+---
+# --- LoadBalancer dengan Annotations GKE ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-loadbalancer-gke
+  labels:
+    app: web
+  annotations:
+    # Gunakan IP statis yang sudah dibuat di GCP
+    # gcloud compute addresses create web-ip --global
+    kubernetes.io/ingress.global-static-ip-name: "web-ip"
+    # Atau untuk regional IP:
+    # cloud.google.com/neg: '{"ingress": true}'
+spec:
+  type: LoadBalancer
+  selector:
+    app: web
+  ports:
+  - port: 80
+    targetPort: 8080

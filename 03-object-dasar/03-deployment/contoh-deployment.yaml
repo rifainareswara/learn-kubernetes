@@ -1,0 +1,220 @@
+# =============================================================================
+# CONTOH DEPLOYMENT KUBERNETES
+# =============================================================================
+# Deployment adalah cara paling umum untuk deploy aplikasi stateless di K8s.
+# Menyediakan rolling update, rollback, dan manajemen ReplicaSet otomatis.
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  namespace: default
+  labels:
+    app: nginx
+    version: "1.25"
+    team: frontend
+  # Annotations: metadata tambahan (tidak digunakan untuk selection)
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    description: "Deployment nginx untuk halaman utama"
+spec:
+  # Jumlah Pod yang harus berjalan
+  replicas: 3
+
+  # Selector: Deployment harus tahu Pod mana yang dikelolanya
+  selector:
+    matchLabels:
+      app: nginx          # Harus match dengan template.metadata.labels
+
+  # Strategi update
+  strategy:
+    type: RollingUpdate   # RollingUpdate (default) atau Recreate
+    rollingUpdate:
+      maxSurge: 1         # Maksimal 1 Pod LEBIH dari replicas saat update
+      maxUnavailable: 0   # Tidak boleh ada Pod yang tidak available (zero-downtime)
+
+  # Berapa lama Kubernetes tunggu Pod baru menjadi Available
+  # sebelum melanjutkan update ke Pod berikutnya
+  minReadySeconds: 5
+
+  # Berapa banyak ReplicaSet lama yang disimpan (untuk rollback)
+  revisionHistoryLimit: 10
+
+  # Template Pod yang akan dibuat
+  template:
+    metadata:
+      labels:
+        app: nginx          # WAJIB match dengan spec.selector.matchLabels
+        version: "1.25"
+      annotations:
+        prometheus.io/scrape: "true"   # Annotation untuk Prometheus scraping
+        prometheus.io/port: "9113"
+    spec:
+      # Terminasi graceful: beri waktu Pod untuk selesaikan request
+      terminationGracePeriodSeconds: 30
+
+      # Distribusi Pod ke berbagai Node (anti-affinity)
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: nginx
+              topologyKey: kubernetes.io/hostname
+
+      containers:
+      - name: nginx
+        image: nginx:1.25               # Image yang digunakan
+        imagePullPolicy: IfNotPresent   # Pull hanya jika belum ada di Node
+
+        ports:
+        - name: http                    # Beri nama port agar lebih deskriptif
+          containerPort: 80
+          protocol: TCP
+
+        # Resource management
+        resources:
+          requests:
+            memory: "64Mi"    # Minimum yang dijamin
+            cpu: "100m"       # 0.1 CPU core
+          limits:
+            memory: "256Mi"   # Maksimum yang boleh dipakai
+            cpu: "500m"       # 0.5 CPU core
+
+        # Environment variables
+        env:
+        - name: NGINX_PORT
+          value: "80"
+        - name: APP_VERSION
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['version']  # Ambil dari label Pod
+
+        # Volume mounts
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d    # Mount config ke path ini
+          readOnly: true
+        - name: nginx-logs
+          mountPath: /var/log/nginx       # Logs nginx
+
+        # Liveness Probe: restart container jika gagal
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 15   # Tunggu 15 detik sebelum mulai probe
+          periodSeconds: 20         # Check setiap 20 detik
+          timeoutSeconds: 5         # Timeout per check
+          failureThreshold: 3       # Restart setelah gagal 3 kali
+
+        # Readiness Probe: tidak kirim traffic jika gagal
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          failureThreshold: 3
+
+        # Startup Probe: untuk aplikasi yang butuh waktu lama startup
+        # (Berguna untuk aplikasi JVM, dll)
+        # startupProbe:
+        #   httpGet:
+        #     path: /
+        #     port: 80
+        #   failureThreshold: 30    # Coba 30 kali dengan period 10 detik = 5 menit max
+        #   periodSeconds: 10
+
+        # Lifecycle hooks
+        lifecycle:
+          preStop:
+            exec:
+              # Beri nginx waktu untuk selesaikan connection yang ada
+              command: ["/bin/sh", "-c", "nginx -s quit; while killall -0 nginx; do sleep 1; done"]
+
+      # Volumes yang tersedia untuk Pod
+      volumes:
+      - name: nginx-config
+        configMap:                # Mount ConfigMap sebagai file
+          name: nginx-config      # Nama ConfigMap (harus ada)
+          optional: true          # Tidak error jika ConfigMap tidak ada
+      - name: nginx-logs
+        emptyDir: {}              # Temporary storage (hilang saat Pod restart)
+
+---
+# --- Deployment untuk Node.js Backend ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-deployment
+  labels:
+    app: backend
+    tier: api
+spec:
+  replicas: 2
+
+  selector:
+    matchLabels:
+      app: backend
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  template:
+    metadata:
+      labels:
+        app: backend
+        tier: api
+    spec:
+      containers:
+      - name: backend
+        image: node:18-alpine      # Node.js image
+
+        # Command dan args (override Dockerfile CMD/ENTRYPOINT)
+        command: ["node"]
+        args: ["server.js"]
+
+        ports:
+        - containerPort: 3000
+
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3000"
+        # Database connection dari Secret
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-secret      # Nama Secret
+              key: password        # Key dalam Secret
+
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "1000m"          # 1 CPU core
+
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 30

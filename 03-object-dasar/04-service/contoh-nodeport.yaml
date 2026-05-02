@@ -1,0 +1,98 @@
+# =============================================================================
+# SERVICE: NODEPORT
+# =============================================================================
+# NodePort mengekspos Service di port tertentu di setiap Node.
+# Bisa diakses dari luar cluster via <NodeIP>:<NodePort>.
+# Range port yang diizinkan: 30000-32767.
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-nodeport-service
+  namespace: default
+  labels:
+    app: nginx
+    service-type: external
+spec:
+  type: NodePort        # Jenis Service: NodePort
+
+  selector:
+    app: nginx          # Cocok dengan Pod nginx kita
+
+  ports:
+  - name: http
+    port: 80            # Port ClusterIP (untuk akses dari dalam cluster)
+    targetPort: 80      # Port di Pod yang menerima traffic
+    nodePort: 30080     # Port di Node (range 30000-32767)
+                        # Jika tidak ditentukan, Kubernetes assign otomatis
+    protocol: TCP
+
+# Cara akses:
+# Dari dalam cluster: http://nginx-nodeport-service:80
+# Dari luar cluster:  http://<NodeIP>:30080
+#
+# Dengan Minikube:
+# minikube service nginx-nodeport-service --url
+# → http://192.168.49.2:30080
+#
+# Dengan Kind:
+# kubectl port-forward service/nginx-nodeport-service 8080:80
+
+---
+# --- Contoh NodePort dengan Auto-assigned Port ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webapp-nodeport
+  labels:
+    app: webapp
+spec:
+  type: NodePort
+  selector:
+    app: webapp
+
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080    # App berjalan di port 8080
+    # nodePort tidak ditentukan → Kubernetes pilih otomatis dari range 30000-32767
+
+---
+# --- Contoh: Multiple NodePort Services ---
+# Service untuk frontend
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  labels:
+    app: frontend
+spec:
+  type: NodePort
+  selector:
+    app: frontend
+    tier: web
+  ports:
+  - name: http
+    port: 80
+    targetPort: 3000    # React dev server biasanya di 3000
+    nodePort: 30090
+
+---
+# Service untuk backend API
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-api-service
+  labels:
+    app: backend
+spec:
+  type: NodePort
+  selector:
+    app: backend
+    tier: api
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    nodePort: 30091

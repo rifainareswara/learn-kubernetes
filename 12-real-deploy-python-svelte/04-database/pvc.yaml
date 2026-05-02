@@ -1,0 +1,51 @@
+# =============================================================================
+# PersistentVolumeClaim (PVC) untuk PostgreSQL
+# =============================================================================
+# PVC adalah "permintaan" storage kepada cluster Kubernetes.
+# Kubernetes akan mencari PersistentVolume (PV) yang sesuai dan mengikatnya.
+#
+# CATATAN PENTING:
+# Jika kamu menggunakan StatefulSet dengan volumeClaimTemplates (di statefulset.yaml),
+# PVC akan dibuat OTOMATIS oleh StatefulSet — kamu TIDAK perlu file PVC ini.
+#
+# File ini berguna untuk:
+# 1. Membuat PVC secara manual sebelum StatefulSet dibuat
+# 2. Jika tidak menggunakan volumeClaimTemplates di StatefulSet
+# 3. Keperluan dokumentasi dan referensi
+#
+# Jika kamu sudah menggunakan volumeClaimTemplates di statefulset.yaml,
+# SKIP file ini dan tidak perlu di-apply.
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data-postgres-0   # Nama yang cocok dengan format StatefulSet: {template}-{pod}
+  namespace: myapp
+  labels:
+    app: postgres
+    tier: database
+spec:
+  # ReadWriteOnce: Volume dapat di-mount dalam mode read-write oleh satu Node
+  # Pilihan lain:
+  # - ReadOnlyMany (ROX): Banyak Node bisa mount dalam mode read-only
+  # - ReadWriteMany (RWX): Banyak Node bisa mount dalam mode read-write (butuh NFS atau CSI khusus)
+  accessModes:
+    - ReadWriteOnce
+
+  # StorageClass menentukan tipe storage yang akan digunakan
+  # Komentar baris ini untuk menggunakan default StorageClass cluster
+  # storageClassName: standard
+
+  # StorageClass per cloud provider:
+  # - Minikube: standard (hostPath)
+  # - Kind: standard (hostPath)
+  # - GKE: standard-rwo (persistent disk)
+  # - EKS: gp2 atau gp3 (EBS)
+  # - ACK: cloud_ssd atau cloud_efficiency (Alibaba Cloud Disk)
+
+  resources:
+    requests:
+      storage: 5Gi    # Request 5 Gibibytes storage
+      # Di production, sesuaikan dengan estimasi ukuran database kamu
+      # Aturan umum: mulai dari 2x ukuran data saat ini, dengan ruang untuk pertumbuhan

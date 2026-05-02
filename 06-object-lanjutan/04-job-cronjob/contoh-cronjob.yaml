@@ -1,0 +1,207 @@
+# =============================================================================
+# CONTOH CRONJOB KUBERNETES
+# =============================================================================
+# CronJob membuat Job secara otomatis berdasarkan jadwal (cron schedule).
+# Format jadwal: menit jam hari-bulan bulan hari-minggu
+# =============================================================================
+
+# --- CronJob Backup Database Harian ---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: database-backup
+  namespace: default
+  labels:
+    app: backup
+    type: scheduled
+spec:
+  # Jadwal: setiap hari pukul 02:00
+  # Format: "menit jam hari bulan hari-minggu"
+  schedule: "0 2 * * *"
+
+  # Timezone (Kubernetes 1.25+)
+  timeZone: "Asia/Jakarta"    # WIB (UTC+7)
+
+  # Jika Job sebelumnya belum selesai saat jadwal berikutnya tiba:
+  # Allow: Biarkan berjalan bersama
+  # Forbid: Skip jadwal baru jika masih ada yang berjalan
+  # Replace: Hapus Job lama, buat Job baru
+  concurrencyPolicy: Forbid
+
+  # Berapa lama batas waktu job bisa mulai jika terlewat (detik)
+  startingDeadlineSeconds: 300   # 5 menit toleransi keterlambatan
+
+  # Berapa history Job sukses yang disimpan
+  successfulJobsHistoryLimit: 7  # Simpan 7 hari terakhir
+
+  # Berapa history Job gagal yang disimpan
+  failedJobsHistoryLimit: 3
+
+  # Suspend CronJob sementara (tanpa menghapus)
+  suspend: false
+
+  # Template Job yang akan dibuat
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600   # Maksimal 1 jam per backup
+
+      template:
+        metadata:
+          labels:
+            app: backup
+            cronjob: database-backup
+        spec:
+          restartPolicy: OnFailure
+
+          containers:
+          - name: backup
+            image: postgres:15-alpine
+
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+              BACKUP_FILE="backup_${TIMESTAMP}.sql"
+
+              echo "Mulai backup database: $BACKUP_FILE"
+              pg_dump -h $DB_HOST -U $DB_USER -d $DB_NAME > /tmp/$BACKUP_FILE
+              echo "Backup selesai: $(wc -c < /tmp/$BACKUP_FILE) bytes"
+
+              # Upload ke cloud storage (uncomment sesuai kebutuhan)
+              # aws s3 cp /tmp/$BACKUP_FILE s3://my-backup-bucket/postgres/
+              # gsutil cp /tmp/$BACKUP_FILE gs://my-backup-bucket/postgres/
+
+              echo "Backup berhasil diunggah!"
+
+            env:
+            - name: DB_HOST
+              value: "postgres-service"
+            - name: DB_USER
+              value: "appuser"
+            - name: DB_NAME
+              value: "myappdb"
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: password
+
+            resources:
+              requests:
+                memory: "128Mi"
+                cpu: "100m"
+              limits:
+                memory: "512Mi"
+                cpu: "500m"
+
+---
+# --- CronJob Cleanup File Lama ---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cleanup-old-files
+  labels:
+    app: maintenance
+spec:
+  schedule: "0 3 * * 0"     # Setiap Minggu pukul 03:00
+  timeZone: "Asia/Jakarta"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 2
+
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: maintenance
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: cleanup
+            image: busybox:1.36
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Memulai cleanup file lama..."
+              # Hapus file yang lebih tua dari 30 hari
+              find /data/uploads -type f -mtime +30 -delete
+              echo "File yang dihapus: $(find /data/uploads -type f -mtime +30 | wc -l)"
+              echo "Cleanup selesai!"
+
+            volumeMounts:
+            - name: data-volume
+              mountPath: /data
+
+            resources:
+              requests:
+                memory: "32Mi"
+                cpu: "50m"
+
+          volumes:
+          - name: data-volume
+            persistentVolumeClaim:
+              claimName: app-data-pvc
+
+---
+# --- CronJob Kirim Laporan Mingguan ---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: weekly-report
+  labels:
+    app: reporting
+spec:
+  schedule: "0 9 * * 1"     # Setiap Senin pukul 09:00
+  timeZone: "Asia/Jakarta"
+  concurrencyPolicy: Allow
+  successfulJobsHistoryLimit: 5
+
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+
+      template:
+        metadata:
+          labels:
+            app: reporting
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: report-sender
+            image: python:3.11-alpine
+
+            command:
+            - python
+            - -c
+            - |
+              import datetime
+              today = datetime.date.today()
+              week_start = today - datetime.timedelta(days=today.weekday())
+              print(f"Membuat laporan untuk minggu: {week_start}")
+              # Tambahkan logika laporan di sini
+              # generate_report(week_start)
+              # send_email(report, recipients)
+              print("Laporan berhasil dikirim!")
+
+            env:
+            - name: SMTP_HOST
+              value: "smtp.gmail.com"
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: smtp-secret
+                  key: password
+
+            resources:
+              requests:
+                memory: "64Mi"
+                cpu: "50m"
+              limits:
+                memory: "256Mi"
+                cpu: "200m"

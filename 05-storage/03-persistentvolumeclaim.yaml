@@ -1,0 +1,230 @@
+# =============================================================================
+# PERSISTENT VOLUME CLAIM (PVC)
+# =============================================================================
+# PVC adalah "permintaan" storage dari user/aplikasi.
+# Kubernetes akan mencari PV yang sesuai dan bind ke PVC ini.
+#
+# Alur:
+# PVC dibuat → K8s cari PV yang sesuai → Bind → Pod pakai PVC
+# =============================================================================
+
+# --- PVC Sederhana (Dynamic Provisioning) ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc              # Nama PVC
+  namespace: default
+  labels:
+    app: postgres
+spec:
+  # StorageClass yang digunakan untuk dynamic provisioning
+  # Jika kosong, akan menggunakan StorageClass default
+  storageClassName: standard      # Sesuaikan dengan StorageClass yang ada
+
+  # Access mode yang diinginkan
+  accessModes:
+    - ReadWriteOnce               # Sesuai dengan PV yang tersedia
+
+  resources:
+    requests:
+      storage: 10Gi               # Request 10 GiB storage
+
+---
+# --- PVC dengan Label Selector (untuk bind ke PV tertentu) ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fast-storage-pvc
+  labels:
+    app: high-performance-app
+spec:
+  storageClassName: manual        # Harus match dengan PV
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  # Selector untuk memilih PV dengan label tertentu
+  selector:
+    matchLabels:
+      storage: fast               # Pilih PV yang punya label "storage: fast"
+
+---
+# =============================================================================
+# CONTOH PENGGUNAAN PVC DI POD
+# =============================================================================
+
+# --- Deployment PostgreSQL dengan PVC ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  labels:
+    app: postgres
+spec:
+  replicas: 1           # Database stateful JANGAN > 1 replica dengan Deployment!
+                        # Untuk HA, gunakan StatefulSet
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine         # PostgreSQL image
+
+        ports:
+        - containerPort: 5432
+
+        env:
+        - name: POSTGRES_DB
+          value: "myappdb"
+        - name: POSTGRES_USER
+          value: "appuser"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret       # Secret yang berisi password
+              key: password
+
+        # Mount PVC sebagai volume
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data   # Path data PostgreSQL
+          subPath: postgres                     # Gunakan subdirektori dalam PV
+                                                # Mencegah issue dengan direktori kosong
+
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+
+        # Health check PostgreSQL
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U appuser -d myappdb
+          initialDelaySeconds: 30
+          periodSeconds: 10
+
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U appuser -d myappdb
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+      # Definisi volume yang menggunakan PVC
+      volumes:
+      - name: postgres-data
+        persistentVolumeClaim:
+          claimName: postgres-pvc     # Nama PVC yang sudah dibuat
+
+---
+# Service untuk PostgreSQL
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  labels:
+    app: postgres
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+
+---
+# Secret untuk password PostgreSQL
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+type: Opaque
+stringData:
+  password: "changeme-in-production"    # Ganti dengan password yang kuat!
+
+---
+# =============================================================================
+# CONTOH: Redis dengan Persistent Storage
+# =============================================================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-pvc
+  labels:
+    app: redis
+spec:
+  storageClassName: standard
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        args: ["--appendonly", "yes"]     # Enable AOF persistence
+
+        ports:
+        - containerPort: 6379
+
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data               # Redis menyimpan data di /data
+
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+
+      volumes:
+      - name: redis-data
+        persistentVolumeClaim:
+          claimName: redis-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+spec:
+  type: ClusterIP
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379

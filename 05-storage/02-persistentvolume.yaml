@@ -1,0 +1,135 @@
+# =============================================================================
+# PERSISTENT VOLUME (PV) DAN STORAGECLASS
+# =============================================================================
+# PersistentVolume adalah storage resource dalam cluster yang telah di-provision
+# oleh admin atau secara dinamis menggunakan StorageClass.
+#
+# Storage lifecycle:
+# 1. Admin buat PersistentVolume (atau StorageClass untuk dynamic provisioning)
+# 2. User buat PersistentVolumeClaim untuk "request" storage
+# 3. Kubernetes bind PVC ke PV yang sesuai
+# 4. Pod menggunakan PVC
+# =============================================================================
+
+# =============================================================================
+# STORAGECLASS - Template untuk Dynamic Provisioning
+# =============================================================================
+# StorageClass memungkinkan PV dibuat secara otomatis saat PVC dibuat.
+# Tidak perlu admin membuat PV manual untuk setiap request.
+
+# --- StorageClass untuk Minikube (menggunakan hostPath) ---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: standard-local
+  annotations:
+    # Jadikan ini StorageClass default
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: k8s.io/minikube-hostpath    # Provisioner Minikube
+reclaimPolicy: Delete    # Apa yang terjadi dengan PV saat PVC dihapus
+                         # Delete: PV dan datanya dihapus
+                         # Retain: PV tetap ada (harus dihapus manual)
+                         # Recycle: Data dihapus, PV bisa dipakai lagi (deprecated)
+volumeBindingMode: Immediate   # Kapan PV di-bind ke PVC
+                               # Immediate: langsung saat PVC dibuat
+                               # WaitForFirstConsumer: tunggu sampai Pod pakai PVC
+
+---
+# --- StorageClass untuk AWS EBS ---
+# apiVersion: storage.k8s.io/v1
+# kind: StorageClass
+# metadata:
+#   name: aws-ebs-gp3
+# provisioner: ebs.csi.aws.com    # AWS EBS CSI Driver
+# parameters:
+#   type: gp3                     # GP3 lebih cost-efficient dari GP2
+#   iops: "3000"                  # IOPS untuk GP3
+#   throughput: "125"             # MB/s throughput
+#   encrypted: "true"             # Enkripsi data at rest
+# reclaimPolicy: Retain
+# allowVolumeExpansion: true       # Izinkan resize PVC
+# volumeBindingMode: WaitForFirstConsumer
+
+---
+# --- StorageClass untuk GKE ---
+# apiVersion: storage.k8s.io/v1
+# kind: StorageClass
+# metadata:
+#   name: gke-ssd
+# provisioner: pd.csi.storage.gke.io
+# parameters:
+#   type: pd-ssd                  # SSD persistent disk
+#   replication-type: none        # Atau regional-pd untuk multi-zone
+# reclaimPolicy: Delete
+# allowVolumeExpansion: true
+# volumeBindingMode: WaitForFirstConsumer
+
+---
+# =============================================================================
+# PERSISTENT VOLUME - Static Provisioning
+# =============================================================================
+# Admin membuat PV secara manual. Cocok untuk on-premise atau storage khusus.
+
+# --- PV dengan hostPath (untuk development/testing) ---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-hostpath-1
+  labels:
+    type: local
+    storage: fast
+spec:
+  storageClassName: manual   # Nama StorageClass (harus match dengan PVC)
+  capacity:
+    storage: 10Gi            # Kapasitas storage
+
+  # Access Modes:
+  # ReadWriteOnce (RWO): bisa di-mount read-write oleh SATU Node
+  # ReadOnlyMany (ROX): bisa di-mount read-only oleh BANYAK Node
+  # ReadWriteMany (RWX): bisa di-mount read-write oleh BANYAK Node (butuh NFS/CephFS)
+  accessModes:
+    - ReadWriteOnce
+
+  # Apa yang terjadi dengan PV saat PVC yang menggunakannya dihapus
+  persistentVolumeReclaimPolicy: Retain   # Retain, Delete, atau Recycle
+
+  hostPath:
+    path: /data/pv-1         # Path di Node (hanya untuk development!)
+    type: DirectoryOrCreate  # Buat direktori jika belum ada
+
+---
+# --- PV untuk NFS (Network File System) ---
+# Cocok untuk ReadWriteMany — bisa diakses banyak Node sekaligus
+# apiVersion: v1
+# kind: PersistentVolume
+# metadata:
+#   name: pv-nfs
+# spec:
+#   storageClassName: nfs-storage
+#   capacity:
+#     storage: 100Gi
+#   accessModes:
+#     - ReadWriteMany          # NFS mendukung RWX!
+#   persistentVolumeReclaimPolicy: Retain
+#   nfs:
+#     server: nfs-server.example.com   # IP atau hostname NFS server
+#     path: /exports/data              # Path di NFS server
+#     readOnly: false
+
+---
+# --- PV untuk AWS EBS (static provisioning) ---
+# apiVersion: v1
+# kind: PersistentVolume
+# metadata:
+#   name: pv-aws-ebs
+# spec:
+#   storageClassName: aws-ebs-gp3
+#   capacity:
+#     storage: 20Gi
+#   accessModes:
+#     - ReadWriteOnce           # EBS hanya mendukung RWO
+#   persistentVolumeReclaimPolicy: Retain
+#   csi:
+#     driver: ebs.csi.aws.com
+#     volumeHandle: vol-xxxxxxxxxxxxxxxxx   # ID volume EBS yang sudah ada
+#     fsType: ext4

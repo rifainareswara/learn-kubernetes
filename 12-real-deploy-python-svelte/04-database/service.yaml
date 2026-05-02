@@ -1,0 +1,41 @@
+# =============================================================================
+# Kubernetes Service untuk PostgreSQL
+# =============================================================================
+# Service ini membuat DNS stable untuk PostgreSQL di dalam cluster.
+# Backend FastAPI akan menggunakan nama "postgres" untuk koneksi database.
+#
+# Untuk StatefulSet, kita bisa menggunakan dua tipe Service:
+#
+# 1. Headless Service (clusterIP: None):
+#    - Memberikan DNS langsung ke Pod: postgres-0.postgres.myapp.svc.cluster.local
+#    - Cocok jika aplikasi perlu tahu Pod spesifik (misalnya untuk replication)
+#
+# 2. Regular ClusterIP Service:
+#    - Memberikan satu IP stabil yang me-load-balance ke semua Pod postgres
+#    - Lebih sederhana, cocok untuk setup single-instance
+#
+# Kita gunakan ClusterIP untuk setup sederhana ini.
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres          # PENTING: Nama ini harus cocok dengan DB_HOST di ConfigMap backend
+  namespace: myapp
+  labels:
+    app: postgres
+    tier: database
+spec:
+  # ClusterIP: hanya dapat diakses dari dalam cluster
+  # PostgreSQL tidak perlu diakses dari luar cluster
+  type: ClusterIP
+
+  # Selector: teruskan traffic ke Pod dengan label ini
+  selector:
+    app: postgres
+
+  ports:
+    - name: postgres
+      protocol: TCP
+      port: 5432          # Port yang diekspos oleh Service
+      targetPort: 5432    # Port PostgreSQL di container

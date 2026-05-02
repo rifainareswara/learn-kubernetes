@@ -1,0 +1,170 @@
+# =============================================================================
+# CONTOH INGRESS KUBERNETES
+# =============================================================================
+# Ingress mengatur routing HTTP/HTTPS dari luar cluster ke Service internal.
+# PERLU: Ingress Controller (nginx, traefik, dll) sudah terinstall!
+# =============================================================================
+
+# --- Ingress dengan Path-based Routing ---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: myapp-ingress
+  namespace: default
+  labels:
+    app: myapp
+  annotations:
+    # Tentukan Ingress Controller yang digunakan
+    kubernetes.io/ingress.class: nginx
+    # Redirect HTTP ke HTTPS (aktifkan jika punya TLS)
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # Ukuran body request maksimal (untuk file upload)
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+spec:
+  rules:
+  - host: myapp.local     # Domain yang di-handle (ubah sesuai kebutuhan)
+    http:
+      paths:
+      - path: /api        # Path /api/* akan diteruskan ke backend-service
+        pathType: Prefix  # Prefix: /api, /api/users, /api/products, dst.
+                          # Exact: hanya /api (persis)
+                          # ImplementationSpecific: tergantung controller
+        backend:
+          service:
+            name: backend-service   # Nama Service tujuan
+            port:
+              number: 80
+
+      - path: /           # Path lainnya ke frontend
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-service
+            port:
+              number: 80
+
+---
+# --- Ingress dengan Multiple Hosts (Virtual Hosting) ---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: multi-host-ingress
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+  # Domain untuk frontend
+  - host: app.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-service
+            port:
+              number: 80
+
+  # Domain untuk API
+  - host: api.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-service
+            port:
+              number: 8080
+
+  # Domain untuk admin panel
+  - host: admin.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: admin-service
+            port:
+              number: 3000
+
+---
+# --- Ingress dengan TLS (HTTPS) ---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: secure-ingress
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"    # Force HTTPS
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # HSTS header
+    nginx.ingress.kubernetes.io/hsts: "true"
+    nginx.ingress.kubernetes.io/hsts-max-age: "31536000"
+spec:
+  # TLS configuration
+  tls:
+  - hosts:
+    - secure.example.com      # Domain yang pakai HTTPS
+    secretName: tls-secret    # Secret berisi TLS certificate dan key
+    # Buat self-signed cert untuk testing:
+    # openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    #   -keyout tls.key -out tls.crt \
+    #   -subj "/CN=secure.example.com"
+    # kubectl create secret tls tls-secret --cert=tls.crt --key=tls.key
+
+  rules:
+  - host: secure.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: secure-app-service
+            port:
+              number: 80
+
+---
+# --- Ingress dengan Rate Limiting dan Advanced Features ---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: advanced-ingress
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: nginx
+
+    # Rate limiting: maksimal 10 request per detik per IP
+    nginx.ingress.kubernetes.io/limit-rps: "10"
+    nginx.ingress.kubernetes.io/limit-connections: "5"
+
+    # CORS settings
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://myapp.com"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization,Content-Type"
+
+    # Proxy timeouts (detik)
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "15"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+
+    # Rewrite: hapus prefix /api dari URL sebelum diteruskan ke backend
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  rules:
+  - host: advanced.example.com
+    http:
+      paths:
+      # /api/v1/users → /v1/users (prefix /api dihapus)
+      - path: /api(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: api-service
+            port:
+              number: 8080

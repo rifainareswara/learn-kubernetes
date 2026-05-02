@@ -1,0 +1,215 @@
+# =============================================================================
+# CONTOH POD KUBERNETES
+# =============================================================================
+# Pod adalah unit terkecil di Kubernetes.
+# File ini mendemonstrasikan berbagai fitur Pod yang umum digunakan.
+# =============================================================================
+
+# --- Contoh 1: Pod Paling Sederhana ---
+apiVersion: v1        # API version untuk Pod adalah "v1" (core API)
+kind: Pod             # Jenis resource: Pod
+metadata:
+  name: nginx-pod     # Nama Pod, harus unik dalam namespace
+  namespace: default  # Namespace tempat Pod dibuat (default = "default")
+  labels:             # Labels: key-value pairs untuk pengelompokan dan selection
+    app: nginx        # Label "app" dengan value "nginx"
+    version: "1.25"   # Label tambahan
+    tier: frontend    # Layer dalam arsitektur
+spec:                 # Spesifikasi (desired state) Pod
+  containers:
+  - name: nginx-container          # Nama container, unik dalam Pod
+    image: nginx:1.25              # Docker image yang digunakan
+    ports:
+    - containerPort: 80            # Port yang diekspos oleh container
+      protocol: TCP                # Protokol (TCP adalah default)
+
+---
+# --- Contoh 2: Pod dengan Resource Limits dan Health Checks ---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-dengan-probe
+  labels:
+    app: nginx
+    environment: production
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.25
+    ports:
+    - containerPort: 80
+
+    # Resource requests dan limits
+    # requests = minimum yang dijamin untuk Pod ini
+    # limits   = maksimum yang boleh digunakan
+    resources:
+      requests:
+        memory: "64Mi"    # 64 Mebibytes minimum
+        cpu: "100m"       # 100 millicores = 0.1 CPU core
+      limits:
+        memory: "128Mi"   # Tidak boleh melebihi 128Mi
+        cpu: "500m"       # Tidak boleh melebihi 0.5 CPU core
+
+    # Liveness Probe: Kubernetes akan restart container jika probe ini gagal
+    # Berguna untuk mendeteksi container yang "hang" (tidak responsive)
+    livenessProbe:
+      httpGet:
+        path: /           # Path HTTP yang di-check
+        port: 80          # Port yang di-check
+      initialDelaySeconds: 10   # Tunggu 10 detik sebelum mulai check
+      periodSeconds: 30         # Check setiap 30 detik
+      failureThreshold: 3       # Restart setelah gagal 3 kali berturut-turut
+      timeoutSeconds: 5         # Timeout per check
+
+    # Readiness Probe: Traffic hanya dikirim ke Pod jika probe ini sukses
+    # Berguna untuk menunggu aplikasi benar-benar siap menerima request
+    readinessProbe:
+      httpGet:
+        path: /
+        port: 80
+      initialDelaySeconds: 5    # Tunggu 5 detik sebelum cek pertama
+      periodSeconds: 10         # Check setiap 10 detik
+      successThreshold: 1       # Dianggap ready setelah sukses 1 kali
+      failureThreshold: 3       # Dianggap tidak ready setelah gagal 3 kali
+
+---
+# --- Contoh 3: Pod dengan Environment Variables ---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app-dengan-env
+  labels:
+    app: my-app
+spec:
+  containers:
+  - name: app
+    image: nginx:1.25
+
+    # Environment variables langsung di Pod
+    env:
+    - name: APP_ENV           # Nama env var
+      value: "production"     # Value langsung (hard-coded)
+    - name: APP_PORT
+      value: "8080"
+    - name: DB_HOST
+      value: "postgres-service.default.svc.cluster.local"  # DNS dalam cluster
+
+    # Mengambil env var dari ConfigMap (akan dipelajari di modul 04)
+    # - name: DB_PASSWORD
+    #   valueFrom:
+    #     configMapKeyRef:
+    #       name: app-config
+    #       key: db_password
+
+    # Mengambil env var dari Secret (akan dipelajari di modul 04)
+    # - name: DB_SECRET
+    #   valueFrom:
+    #     secretKeyRef:
+    #       name: app-secrets
+    #       key: db_password
+
+    # Env var dari informasi Pod itu sendiri (Downward API)
+    - name: POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name     # Akan berisi nama Pod
+    - name: POD_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+
+---
+# --- Contoh 4: Pod dengan Volume ---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-dengan-volume
+  labels:
+    app: app-storage
+spec:
+  containers:
+  - name: app
+    image: nginx:1.25
+    volumeMounts:
+    - name: web-content        # Nama volume yang di-mount (harus match dengan volumes[])
+      mountPath: /usr/share/nginx/html   # Path di dalam container
+      readOnly: false          # Apakah read-only
+
+  # Definisi volumes yang tersedia untuk Pod ini
+  volumes:
+  - name: web-content          # Nama volume (direferensikan di volumeMounts)
+    emptyDir: {}               # emptyDir: storage sementara yang hidup selama Pod hidup
+    # Tipe volume lain:
+    # hostPath:                 # Mount direktori dari host node
+    #   path: /data
+    # configMap:               # Mount ConfigMap sebagai file
+    #   name: my-configmap
+    # secret:                  # Mount Secret sebagai file
+    #   secretName: my-secret
+    # persistentVolumeClaim:   # Mount PVC (persistent storage)
+    #   claimName: my-pvc
+
+---
+# --- Contoh 5: Pod Multi-Container (Sidecar Pattern) ---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-sidecar
+  labels:
+    app: app-with-sidecar
+spec:
+  # Init container berjalan sebelum container utama
+  initContainers:
+  - name: init-setup
+    image: busybox:1.36
+    command: ['sh', '-c', 'echo "Inisialisasi selesai" > /shared/init.txt']
+    volumeMounts:
+    - name: shared-data
+      mountPath: /shared
+
+  containers:
+  # Container utama
+  - name: nginx
+    image: nginx:1.25
+    ports:
+    - containerPort: 80
+    volumeMounts:
+    - name: shared-data
+      mountPath: /usr/share/nginx/html
+
+  # Sidecar: container pendamping yang berbagi resources dengan container utama
+  - name: log-sidecar
+    image: busybox:1.36
+    command: ['sh', '-c', 'while true; do echo "$(date) - log entry" >> /logs/app.log; sleep 5; done']
+    volumeMounts:
+    - name: shared-data
+      mountPath: /logs
+
+  # Volume yang di-share antara semua container dalam Pod
+  volumes:
+  - name: shared-data
+    emptyDir: {}
+
+---
+# --- Contoh 6: Pod dengan nodeSelector dan Tolerations ---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-dengan-scheduling
+  labels:
+    app: special-app
+spec:
+  # nodeSelector: hanya jadwalkan di Node dengan label ini
+  nodeSelector:
+    disktype: ssd          # Hanya Node yang punya label disktype=ssd
+
+  # Tolerations: izinkan Pod berjalan di Node yang punya taint tertentu
+  tolerations:
+  - key: "dedicated"
+    operator: "Equal"
+    value: "gpu-node"
+    effect: "NoSchedule"
+
+  containers:
+  - name: app
+    image: nginx:1.25

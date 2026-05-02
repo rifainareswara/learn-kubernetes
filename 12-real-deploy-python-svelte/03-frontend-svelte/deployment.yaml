@@ -1,0 +1,95 @@
+# =============================================================================
+# Kubernetes Deployment untuk Frontend Svelte + Nginx
+# =============================================================================
+# Frontend berupa file statis yang di-serve oleh Nginx.
+# Container ini sangat ringan (CPU/memory rendah) dan bisa di-scale dengan mudah.
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: myapp        # Harus sama dengan namespace lainnya
+  labels:
+    app: frontend
+    tier: web
+    version: "1.0"
+spec:
+  # 2 replika untuk high availability
+  # Frontend stateless sehingga mudah di-scale
+  replicas: 2
+
+  selector:
+    matchLabels:
+      app: frontend
+
+  # RollingUpdate: update satu Pod dulu, tunggu ready, baru update Pod berikutnya
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+
+  template:
+    metadata:
+      labels:
+        app: frontend
+        tier: web
+    spec:
+      containers:
+        - name: frontend
+          # GANTI dengan path image registry kamu
+          # Contoh GCR: asia-southeast1-docker.pkg.dev/PROJECT_ID/myapp/frontend:v1.0
+          # Contoh ECR: ACCOUNT_ID.dkr.ecr.ap-southeast-1.amazonaws.com/myapp/frontend:v1.0
+          image: your-registry/frontend:latest
+          imagePullPolicy: Always
+
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+
+          # ── Resource Limits ──────────────────────────────────────────────────
+          # Nginx untuk serve file statis sangat efisien — resource yang dibutuhkan kecil
+          resources:
+            requests:
+              cpu: 50m        # 50 millicores = 0.05 CPU core (sangat ringan)
+              memory: 64Mi    # 64 Mebibytes
+            limits:
+              cpu: 100m       # Maksimal 0.1 CPU core
+              memory: 128Mi   # Maksimal 128MB
+
+          # ── Readiness Probe ──────────────────────────────────────────────────
+          # Cek apakah Nginx sudah siap melayani traffic
+          readinessProbe:
+            httpGet:
+              path: /          # Request ke root path
+              port: 80
+            initialDelaySeconds: 5    # Nginx startup sangat cepat
+            periodSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
+
+          # ── Liveness Probe ───────────────────────────────────────────────────
+          # Restart container jika Nginx tidak merespons
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 5
+
+          # ── Volume Mount untuk konfigurasi Nginx (opsional) ─────────────────
+          # Jika ingin update nginx.conf tanpa rebuild image, bisa pakai ConfigMap
+          # volumeMounts:
+          #   - name: nginx-config
+          #     mountPath: /etc/nginx/conf.d/default.conf
+          #     subPath: nginx.conf
+
+      # Volumes (diaktifkan jika menggunakan nginx config dari ConfigMap)
+      # volumes:
+      #   - name: nginx-config
+      #     configMap:
+      #       name: frontend-nginx-config

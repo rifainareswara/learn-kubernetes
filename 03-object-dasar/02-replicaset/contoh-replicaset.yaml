@@ -1,0 +1,131 @@
+# =============================================================================
+# CONTOH REPLICASET KUBERNETES
+# =============================================================================
+# ReplicaSet memastikan jumlah Pod yang berjalan sesuai dengan yang diinginkan.
+# Jika Pod mati, ReplicaSet akan otomatis membuat Pod pengganti.
+# =============================================================================
+
+apiVersion: apps/v1     # ReplicaSet ada di API group "apps", versi "v1"
+kind: ReplicaSet        # Jenis resource: ReplicaSet
+metadata:
+  name: nginx-replicaset     # Nama ReplicaSet
+  namespace: default
+  labels:
+    app: nginx-rs            # Label untuk ReplicaSet itu sendiri
+    tier: frontend
+spec:
+  replicas: 3           # Jumlah Pod yang harus selalu berjalan
+
+  # Selector: bagaimana ReplicaSet mengidentifikasi Pod yang dikelolanya
+  # ReplicaSet hanya mengelola Pod yang cocok dengan selector ini
+  selector:
+    matchLabels:
+      app: nginx-rs           # Kelola Pod yang punya label "app: nginx-rs"
+      # matchExpressions:     # Selector yang lebih fleksibel
+      # - key: app
+      #   operator: In        # Operator: In, NotIn, Exists, DoesNotExist
+      #   values:
+      #   - nginx-rs
+      #   - nginx-web
+
+  # Template Pod yang akan dibuat saat ReplicaSet butuh Pod baru
+  # Harus punya label yang sama dengan selector di atas!
+  template:
+    metadata:
+      labels:
+        app: nginx-rs         # WAJIB sama dengan selector.matchLabels
+        tier: frontend
+        version: "1.25"
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.25
+        ports:
+        - containerPort: 80
+
+        # Resource requests dan limits
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+
+        # Readiness probe: Pod hanya menerima traffic jika probe ini sukses
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 10
+
+        # Liveness probe: Pod di-restart jika probe ini gagal
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          failureThreshold: 3
+
+---
+# --- Contoh: ReplicaSet dengan Multiple Replicas dan Custom App ---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: webapp-replicaset
+  labels:
+    app: webapp
+    version: v2
+spec:
+  replicas: 5          # 5 Pod berjalan secara bersamaan
+
+  selector:
+    matchLabels:
+      app: webapp
+      version: v2
+
+  template:
+    metadata:
+      labels:
+        app: webapp
+        version: v2
+        tier: frontend
+    spec:
+      # Jika Node dengan label ini tidak tersedia, Pod tetap bisa di-schedule
+      # ke Node lain (tidak seperti nodeSelector yang hard constraint)
+      affinity:
+        podAntiAffinity:       # Preferensi: sebar Pod ke Node yang berbeda
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: webapp
+              topologyKey: kubernetes.io/hostname  # Sebar per hostname (Node)
+
+      containers:
+      - name: webapp
+        image: nginx:1.25   # Ganti dengan image aplikasimu
+        ports:
+        - containerPort: 80
+
+        env:
+        - name: APP_VERSION
+          value: "v2"
+
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+
+        # Konfigurasi container lifecycle hooks
+        lifecycle:
+          preStop:
+            exec:
+              # Beri waktu 15 detik untuk selesaikan request yang sedang berjalan
+              command: ["/bin/sh", "-c", "sleep 15"]

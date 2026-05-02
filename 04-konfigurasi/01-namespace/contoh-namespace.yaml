@@ -1,0 +1,134 @@
+# =============================================================================
+# CONTOH NAMESPACE KUBERNETES
+# =============================================================================
+# Namespace mempartisi cluster menjadi beberapa virtual cluster yang terisolasi.
+# =============================================================================
+
+# --- Namespace Development ---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: development
+  labels:
+    environment: development
+    team: backend
+  annotations:
+    description: "Namespace untuk environment development"
+    contact: "tim-backend@perusahaan.com"
+
+---
+# --- Namespace Staging ---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: staging
+  labels:
+    environment: staging
+    team: backend
+
+---
+# --- Namespace Production ---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: production
+  labels:
+    environment: production
+    team: backend
+
+---
+# =============================================================================
+# RESOURCE QUOTA - Batasi penggunaan resource per Namespace
+# =============================================================================
+# ResourceQuota memastikan satu namespace tidak menggunakan terlalu banyak
+# resource yang seharusnya dibagi dengan namespace lain.
+
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: development-quota    # Nama quota
+  namespace: development     # Berlaku untuk namespace ini
+spec:
+  hard:
+    # Batas jumlah object
+    pods: "20"                      # Maksimal 20 Pod
+    services: "10"                  # Maksimal 10 Service
+    configmaps: "20"                # Maksimal 20 ConfigMap
+    persistentvolumeclaims: "10"    # Maksimal 10 PVC
+    secrets: "20"                   # Maksimal 20 Secret
+
+    # Batas penggunaan resource (aggregate dari semua Pod)
+    requests.cpu: "4"               # Total CPU requests maksimal 4 core
+    requests.memory: "8Gi"          # Total memory requests maksimal 8 GiB
+    limits.cpu: "8"                 # Total CPU limits maksimal 8 core
+    limits.memory: "16Gi"           # Total memory limits maksimal 16 GiB
+
+    # Batas storage
+    requests.storage: "50Gi"        # Total storage requests maksimal 50 GiB
+
+---
+# --- Resource Quota untuk Production (lebih besar) ---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: production-quota
+  namespace: production
+spec:
+  hard:
+    pods: "100"
+    services: "50"
+    requests.cpu: "32"
+    requests.memory: "64Gi"
+    limits.cpu: "64"
+    limits.memory: "128Gi"
+    requests.storage: "500Gi"
+
+---
+# =============================================================================
+# LIMIT RANGE - Set default resource limits per Container
+# =============================================================================
+# LimitRange memastikan setiap container punya resource request dan limit,
+# bahkan jika user tidak menentukannya secara eksplisit.
+
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: default-resource-limits
+  namespace: development
+spec:
+  limits:
+  # Pengaturan untuk Container
+  - type: Container
+    # Default LIMIT jika container tidak menentukan limits
+    default:
+      memory: "256Mi"
+      cpu: "500m"
+    # Default REQUEST jika container tidak menentukan requests
+    defaultRequest:
+      memory: "64Mi"
+      cpu: "100m"
+    # Batas MINIMUM yang diizinkan
+    min:
+      memory: "32Mi"
+      cpu: "50m"
+    # Batas MAKSIMUM yang diizinkan untuk satu container
+    max:
+      memory: "2Gi"
+      cpu: "2"
+    # Maksimal rasio limit/request
+    maxLimitRequestRatio:
+      memory: "4"     # Limit tidak boleh lebih dari 4x request
+      cpu: "4"
+
+  # Pengaturan untuk Pod (aggregate semua container)
+  - type: Pod
+    max:
+      memory: "4Gi"
+      cpu: "4"
+
+  # Pengaturan untuk PersistentVolumeClaim
+  - type: PersistentVolumeClaim
+    min:
+      storage: "1Gi"
+    max:
+      storage: "20Gi"

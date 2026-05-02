@@ -1,0 +1,139 @@
+# =============================================================================
+# VOLUME: EMPTYDIR
+# =============================================================================
+# emptyDir adalah volume temporary yang:
+# - Dibuat saat Pod dimulai
+# - DIHAPUS saat Pod dihapus atau di-restart
+# - Di-share antara semua container dalam satu Pod
+#
+# Cocok untuk:
+# - Sharing data antar container dalam Pod (sidecar pattern)
+# - Cache sementara
+# - Scratch space untuk komputasi
+# =============================================================================
+
+# --- Contoh 1: emptyDir Sederhana ---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-emptydir
+  labels:
+    app: emptydir-demo
+spec:
+  containers:
+  # Container utama: menulis data
+  - name: writer
+    image: busybox:1.36
+    # Tulis data setiap 5 detik ke shared volume
+    command: ['sh', '-c',
+      'i=0;
+       while true; do
+         echo "$(date): Data ke-$i" >> /shared/data.txt;
+         i=$((i+1));
+         sleep 5;
+       done']
+    volumeMounts:
+    - name: shared-storage   # Nama volume (harus match dengan volumes[])
+      mountPath: /shared      # Path di dalam container ini
+
+  # Container sidecar: membaca data yang ditulis container pertama
+  - name: reader
+    image: busybox:1.36
+    # Baca dan tampilkan data setiap 10 detik
+    command: ['sh', '-c', 'while true; do echo "--- Isi file ---"; cat /shared/data.txt 2>/dev/null || echo "File belum ada"; sleep 10; done']
+    volumeMounts:
+    - name: shared-storage   # Volume yang SAMA
+      mountPath: /shared      # Path di container ini (boleh berbeda)
+
+  # Definisi volume
+  volumes:
+  - name: shared-storage      # Nama yang direferensikan di volumeMounts
+    emptyDir: {}              # {} = menggunakan disk Node
+    # Untuk storage di memory (RAM):
+    # emptyDir:
+    #   medium: Memory        # Lebih cepat, tapi pakai RAM
+    #   sizeLimit: 256Mi      # Batasi ukuran
+
+---
+# --- Contoh 2: emptyDir untuk Init Container Pattern ---
+# Init container menyiapkan data, container utama menggunakannya
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-init-emptydir
+  labels:
+    app: init-demo
+spec:
+  # Init containers berjalan SEBELUM container utama
+  # Harus selesai sukses sebelum container utama dimulai
+  initContainers:
+  - name: downloader
+    image: busybox:1.36
+    command: ['sh', '-c',
+      'echo "Mendownload konfigurasi...";
+       echo "server_name=myapp" > /init-data/config.txt;
+       echo "version=1.0.0" >> /init-data/config.txt;
+       echo "Download selesai!";']
+    volumeMounts:
+    - name: init-data
+      mountPath: /init-data
+
+  - name: db-migration
+    image: busybox:1.36
+    command: ['sh', '-c',
+      'echo "Menjalankan database migration...";
+       echo "Migration berhasil" > /init-data/migration.done;']
+    volumeMounts:
+    - name: init-data
+      mountPath: /init-data
+
+  containers:
+  - name: main-app
+    image: nginx:1.25
+    command: ['sh', '-c',
+      'echo "Konfigurasi:"; cat /app/config.txt;
+       echo "Migration status:"; cat /app/migration.done;
+       nginx -g "daemon off;"']
+    volumeMounts:
+    - name: init-data
+      mountPath: /app
+      readOnly: true          # Container utama hanya baca
+
+  volumes:
+  - name: init-data
+    emptyDir: {}
+
+---
+# --- Contoh 3: emptyDir untuk Nginx + Log Sidecar ---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-dengan-log-sidecar
+  labels:
+    app: nginx-log
+spec:
+  containers:
+  # Container utama: nginx web server
+  - name: nginx
+    image: nginx:1.25
+    ports:
+    - containerPort: 80
+    volumeMounts:
+    - name: nginx-logs
+      mountPath: /var/log/nginx  # Tulis log ke shared volume
+
+  # Sidecar: kirim log ke stdout (agar terlihat di kubectl logs)
+  - name: log-forwarder
+    image: busybox:1.36
+    command: ['sh', '-c', 'tail -f /logs/access.log 2>/dev/null || while [ ! -f /logs/access.log ]; do sleep 1; done; tail -f /logs/access.log']
+    volumeMounts:
+    - name: nginx-logs
+      mountPath: /logs          # Baca dari path yang sama dengan nginx
+
+  volumes:
+  - name: nginx-logs
+    emptyDir: {}
+
+# Setelah apply:
+# kubectl logs nginx-dengan-log-sidecar -c log-forwarder -f
+# Akan menampilkan access log nginx secara real-time

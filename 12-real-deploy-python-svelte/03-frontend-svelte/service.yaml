@@ -1,0 +1,32 @@
+# =============================================================================
+# Kubernetes Service untuk Frontend Svelte/Nginx
+# =============================================================================
+# Service ClusterIP untuk frontend.
+# Traffic dari internet → Ingress → Service frontend → Pod Svelte/Nginx
+#
+# Kita tidak perlu tipe LoadBalancer atau NodePort di sini karena
+# Ingress Controller yang menangani akses dari luar cluster.
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend          # Nama service ini — digunakan sebagai DNS di dalam cluster
+  namespace: myapp        # Harus sama dengan namespace Deployment
+  labels:
+    app: frontend
+    tier: web
+spec:
+  # ClusterIP: Service hanya dapat diakses dari dalam cluster
+  # Ingress Controller (yang berjalan di dalam cluster) akan mengakses service ini
+  type: ClusterIP
+
+  # Selector: cocokkan dengan label Pod di deployment.yaml
+  selector:
+    app: frontend
+
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80          # Port Service yang diakses dari dalam cluster
+      targetPort: 80    # Port container Nginx yang menerima traffic

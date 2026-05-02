@@ -1,0 +1,35 @@
+# =============================================================================
+# Kubernetes Service untuk Backend FastAPI
+# =============================================================================
+# Service memberikan stable network endpoint untuk mengakses Pod.
+# Pod bisa datang dan pergi (restart, scaling), tapi Service tetap di IP yang sama.
+#
+# Tipe ClusterIP: hanya bisa diakses dari dalam cluster.
+# Backend tidak perlu diakses langsung dari internet — Ingress yang mengatur routing.
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend           # Nama service ini — digunakan sebagai DNS hostname di dalam cluster
+  namespace: myapp        # Harus sama dengan namespace Deployment
+  labels:
+    app: backend
+    tier: api
+spec:
+  # ClusterIP: Service hanya dapat diakses dari dalam cluster
+  # Pod lain bisa mengakses dengan: http://backend.myapp.svc.cluster.local:8000
+  # Atau cukup: http://backend:8000 (jika di namespace yang sama)
+  type: ClusterIP
+
+  # Selector: Service akan meneruskan traffic ke Pod yang punya label ini
+  # Harus cocok dengan label di Pod template di deployment.yaml
+  selector:
+    app: backend
+
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8000        # Port yang diekspos oleh Service (port yang diakses dari dalam cluster)
+      targetPort: 8000  # Port di container yang menerima traffic (harus sama dengan containerPort)
+      # Ingress akan meneruskan traffic ke port 8000 ini
