@@ -88,86 +88,71 @@ Ini adalah kode lengkap FastAPI untuk aplikasi Todo:
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from datetime import datetime
+from typing import Optional
 import os
 
-# ─── Konfigurasi Database ──────────────────────────────────────────────────────
-# Baca dari environment variables (diset oleh ConfigMap/Secret di Kubernetes)
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("DB_NAME", "tododb")
-DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASS = os.getenv("DB_PASS", "postgres")
-
-DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+DATABASE_URL = (
+    f"postgresql://{os.getenv('DB_USER', 'postgres')}"
+    f":{os.getenv('DB_PASS', 'postgres')}"
+    f"@{os.getenv('DB_HOST', 'localhost')}"
+    f":{os.getenv('DB_PORT', '5432')}"
+    f"/{os.getenv('DB_NAME', 'tododb')}"
+)
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
-# ─── Model Database ────────────────────────────────────────────────────────────
-class TodoDB(Base):
+class TodoModel(Base):
     __tablename__ = "todos"
 
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String(200), nullable=False)
-    description = Column(String(500), nullable=True)
-    completed = Column(Boolean, default=False)
+    title = Column(String, nullable=False)
+    description = Column(String, default="")
+    done = Column(Boolean, default=False)          # ← field: "done" (bukan "completed")
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-# Buat tabel jika belum ada
 Base.metadata.create_all(bind=engine)
 
+app = FastAPI(title="Todo API", version="1.0.0")
 
-# ─── Pydantic Schemas ──────────────────────────────────────────────────────────
-class TodoCreate(BaseModel):
-    title: str
-    description: Optional[str] = None
-
-
-class TodoUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    completed: Optional[bool] = None
-
-
-class TodoResponse(BaseModel):
-    id: int
-    title: str
-    description: Optional[str]
-    completed: bool
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-# ─── Inisialisasi FastAPI ──────────────────────────────────────────────────────
-app = FastAPI(
-    title="Todo API",
-    description="REST API untuk Todo List — Contoh deploy di Kubernetes",
-    version="1.0.0",
-)
-
-# CORS: izinkan frontend Svelte mengakses API
-# Di Kubernetes, frontend dan backend berada di domain yang sama (via Ingress)
-# tapi kita tetap set CORS untuk keamanan
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Di production, ganti dengan domain spesifik
+    allow_origins=os.getenv("CORS_ORIGINS", "*").split(","),  # ← baca dari env
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# ─── Database Dependency ───────────────────────────────────────────────────────
+class TodoCreate(BaseModel):
+    title: str
+    description: Optional[str] = ""
+
+
+class TodoUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    done: Optional[bool] = None                    # ← field: "done"
+
+
+class TodoResponse(BaseModel):
+    id: int
+    title: str
+    description: str
+    done: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -176,104 +161,296 @@ def get_db():
         db.close()
 
 
-# ─── Health Check ──────────────────────────────────────────────────────────────
-# PENTING: Endpoint ini digunakan oleh Kubernetes readinessProbe dan livenessProbe
-@app.get("/health", tags=["System"])
-async def health_check():
-    return {"status": "healthy", "service": "todo-backend"}
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
 
 
-@app.get("/", tags=["System"])
-async def root():
-    return {"message": "Todo API berjalan. Buka /docs untuk dokumentasi."}
+@app.get("/todos", response_model=list[TodoResponse])
+def list_todos(db: Session = Depends(get_db)):
+    return db.query(TodoModel).order_by(TodoModel.created_at.desc()).all()
 
 
-# ─── CRUD Endpoints ────────────────────────────────────────────────────────────
-@app.get("/todos", response_model=List[TodoResponse], tags=["Todos"])
-async def get_todos(
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
-):
-    """Ambil semua todos"""
-    todos = db.query(TodoDB).offset(skip).limit(limit).all()
-    return todos
-
-
-@app.post("/todos", response_model=TodoResponse, status_code=201, tags=["Todos"])
-async def create_todo(todo: TodoCreate, db: Session = Depends(get_db)):
-    """Buat todo baru"""
-    db_todo = TodoDB(**todo.model_dump())
-    db.add(db_todo)
-    db.commit()
-    db.refresh(db_todo)
-    return db_todo
-
-
-@app.get("/todos/{todo_id}", response_model=TodoResponse, tags=["Todos"])
-async def get_todo(todo_id: int, db: Session = Depends(get_db)):
-    """Ambil satu todo berdasarkan ID"""
-    todo = db.query(TodoDB).filter(TodoDB.id == todo_id).first()
-    if not todo:
-        raise HTTPException(status_code=404, detail="Todo tidak ditemukan")
-    return todo
-
-
-@app.put("/todos/{todo_id}", response_model=TodoResponse, tags=["Todos"])
-async def update_todo(
-    todo_id: int,
-    todo_update: TodoUpdate,
-    db: Session = Depends(get_db)
-):
-    """Update todo (judul, deskripsi, atau status selesai)"""
-    todo = db.query(TodoDB).filter(TodoDB.id == todo_id).first()
-    if not todo:
-        raise HTTPException(status_code=404, detail="Todo tidak ditemukan")
-
-    update_data = todo_update.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(todo, field, value)
-
+@app.post("/todos", response_model=TodoResponse, status_code=201)
+def create_todo(payload: TodoCreate, db: Session = Depends(get_db)):
+    todo = TodoModel(**payload.model_dump())
+    db.add(todo)
     db.commit()
     db.refresh(todo)
     return todo
 
 
-@app.delete("/todos/{todo_id}", status_code=204, tags=["Todos"])
-async def delete_todo(todo_id: int, db: Session = Depends(get_db)):
-    """Hapus todo berdasarkan ID"""
-    todo = db.query(TodoDB).filter(TodoDB.id == todo_id).first()
+@app.get("/todos/{todo_id}", response_model=TodoResponse)
+def get_todo(todo_id: int, db: Session = Depends(get_db)):
+    todo = db.query(TodoModel).filter(TodoModel.id == todo_id).first()
     if not todo:
         raise HTTPException(status_code=404, detail="Todo tidak ditemukan")
+    return todo
 
+
+@app.patch("/todos/{todo_id}", response_model=TodoResponse)  # ← PATCH, bukan PUT
+def update_todo(todo_id: int, payload: TodoUpdate, db: Session = Depends(get_db)):
+    todo = db.query(TodoModel).filter(TodoModel.id == todo_id).first()
+    if not todo:
+        raise HTTPException(status_code=404, detail="Todo tidak ditemukan")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(todo, field, value)
+    db.commit()
+    db.refresh(todo)
+    return todo
+
+
+@app.delete("/todos/{todo_id}", status_code=204)
+def delete_todo(todo_id: int, db: Session = Depends(get_db)):
+    todo = db.query(TodoModel).filter(TodoModel.id == todo_id).first()
+    if not todo:
+        raise HTTPException(status_code=404, detail="Todo tidak ditemukan")
     db.delete(todo)
     db.commit()
-    return None
 ```
+
+> [!IMPORTANT]
+> Perhatikan beberapa perbedaan dari contoh umum di internet:
+> - Field status todo menggunakan `done` (bukan `completed`)
+> - Update menggunakan method **`PATCH`** (bukan `PUT`) — hanya update field yang dikirim
+> - `CORS_ORIGINS` dibaca dari environment variable, bukan hardcode `"*"`
+> - `health_check` mengembalikan `{"status": "ok"}` (bukan `"healthy"`)
 
 ---
 
-## Dependensi Backend: `backend/requirements.txt`
+## Backend: `backend/requirements.txt`
 
 ```
-fastapi==0.104.1
-uvicorn==0.24.0
-pydantic==2.4.2
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+sqlalchemy==2.0.35
 psycopg2-binary==2.9.9
-sqlalchemy==2.0.23
-python-dotenv==1.0.0
+python-dotenv==1.0.1
 ```
-
-**Penjelasan setiap dependensi:**
 
 | Package | Kegunaan |
 |---|---|
 | `fastapi` | Framework web utama |
-| `uvicorn` | ASGI server untuk menjalankan FastAPI |
+| `uvicorn[standard]` | ASGI server dengan extras (watchfiles, websockets) |
 | `pydantic` | Validasi data dan serialisasi |
-| `psycopg2-binary` | Driver PostgreSQL untuk Python |
 | `sqlalchemy` | ORM untuk interaksi database |
+| `psycopg2-binary` | Driver PostgreSQL untuk Python |
 | `python-dotenv` | Load `.env` file saat development lokal |
+
+---
+
+## Backend: `backend/.env.example`
+
+Salin file ini menjadi `.env` untuk development lokal:
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Isi `.env.example`:
+
+```
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=tododb
+DB_USER=postgres
+DB_PASS=postgres
+CORS_ORIGINS=http://localhost:5173
+```
+
+> [!NOTE]
+> `CORS_ORIGINS` menggunakan `http://localhost:5173` (port Vite dev server) saat development lokal.
+> Di production Kubernetes, nilai ini diset via ConfigMap.
+
+---
+
+## Backend: `backend/Dockerfile`
+
+```dockerfile
+FROM python:3.12-slim AS builder
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+FROM python:3.12-slim
+WORKDIR /app
+COPY --from=builder /root/.local /root/.local
+COPY . .
+ENV PATH=/root/.local/bin:$PATH
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+**Penjelasan multi-stage build:**
+- **Stage `builder`** — install semua package Python (image sementara, tidak di-push)
+- **Stage final** — salin hanya hasil install dari builder, tanpa tool build → image lebih kecil
+
+---
+
+## Frontend: `frontend/src/lib/api.js`
+
+Helper terpusat untuk semua HTTP request ke backend:
+
+```javascript
+const BASE_URL = import.meta.env.VITE_API_URL || '/api'
+
+async function request(path, options = {}) {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Terjadi kesalahan' }))
+    throw new Error(err.detail || 'Request gagal')
+  }
+  if (res.status === 204) return null
+  return res.json()
+}
+
+export const api = {
+  getTodos: () => request('/todos'),
+  createTodo: (data) => request('/todos', { method: 'POST', body: JSON.stringify(data) }),
+  updateTodo: (id, data) => request(`/todos/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteTodo: (id) => request(`/todos/${id}`, { method: 'DELETE' }),
+}
+```
+
+> [!NOTE]
+> `App.svelte` mengimport dari file ini dengan `import { api } from './lib/api.js'` — bukan memanggil `fetch` langsung. Ini memisahkan logika HTTP dari logika UI.
+
+---
+
+## Frontend: `frontend/src/main.js`
+
+```javascript
+import App from './App.svelte'
+
+const app = new App({ target: document.getElementById('app') })
+
+export default app
+```
+
+---
+
+## Frontend: `frontend/src/App.svelte`
+
+```svelte
+<script>
+  import { onMount } from 'svelte'
+  import { api } from './lib/api.js'
+
+  let todos = []
+  let loading = true
+  let error = ''
+  let newTitle = ''
+  let newDescription = ''
+  let submitting = false
+
+  onMount(fetchTodos)
+
+  async function fetchTodos() {
+    loading = true
+    error = ''
+    try {
+      todos = await api.getTodos()
+    } catch (e) {
+      error = e.message
+    } finally {
+      loading = false
+    }
+  }
+
+  async function handleCreate() {
+    if (!newTitle.trim()) return
+    submitting = true
+    error = ''
+    try {
+      const todo = await api.createTodo({ title: newTitle.trim(), description: newDescription.trim() })
+      todos = [todo, ...todos]
+      newTitle = ''
+      newDescription = ''
+    } catch (e) {
+      error = e.message
+    } finally {
+      submitting = false
+    }
+  }
+
+  async function toggleDone(todo) {
+    try {
+      const updated = await api.updateTodo(todo.id, { done: !todo.done })
+      todos = todos.map(t => t.id === updated.id ? updated : t)
+    } catch (e) {
+      error = e.message
+    }
+  }
+
+  async function handleDelete(id) {
+    try {
+      await api.deleteTodo(id)
+      todos = todos.filter(t => t.id !== id)
+    } catch (e) {
+      error = e.message
+    }
+  }
+
+  function handleKeydown(e) {
+    if (e.key === 'Enter') handleCreate()
+  }
+</script>
+
+<main>
+  <h1>Todo App</h1>
+  <p class="subtitle">Belajar deploy ke Kubernetes</p>
+
+  <div class="form">
+    <input type="text" placeholder="Judul todo..." bind:value={newTitle}
+      on:keydown={handleKeydown} disabled={submitting} />
+    <input type="text" placeholder="Deskripsi (opsional)..." bind:value={newDescription}
+      on:keydown={handleKeydown} disabled={submitting} />
+    <button on:click={handleCreate} disabled={submitting || !newTitle.trim()}>
+      {submitting ? 'Menyimpan...' : '+ Tambah'}
+    </button>
+  </div>
+
+  {#if error}
+    <p class="error">{error}</p>
+  {/if}
+
+  {#if loading}
+    <p class="loading">Memuat...</p>
+  {:else if todos.length === 0}
+    <p class="empty">Belum ada todo. Tambahkan yang pertama!</p>
+  {:else}
+    <ul>
+      {#each todos as todo (todo.id)}
+        <li class:done={todo.done}>
+          <button class="check" on:click={() => toggleDone(todo)}>
+            {todo.done ? '✓' : '○'}
+          </button>
+          <div class="content">
+            <span class="title">{todo.title}</span>
+            {#if todo.description}
+              <span class="desc">{todo.description}</span>
+            {/if}
+          </div>
+          <button class="delete" on:click={() => handleDelete(todo.id)}>✕</button>
+        </li>
+      {/each}
+    </ul>
+    <p class="count">
+      {todos.filter(t => t.done).length}/{todos.length} selesai
+    </p>
+  {/if}
+</main>
+
+<style>
+  /* ... lihat file lengkap di app/frontend/src/App.svelte ... */
+</style>
+```
 
 ---
 
@@ -290,12 +467,14 @@ python-dotenv==1.0.0
     "preview": "vite preview"
   },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^3.0.2",
-    "svelte": "^4.2.8",
-    "vite": "^5.0.8"
+    "@sveltejs/vite-plugin-svelte": "^3.1.2",
+    "svelte": "^4.2.19",
+    "vite": "^5.4.8"
   }
 }
 ```
+
+---
 
 ## Frontend: `frontend/vite.config.js`
 
@@ -306,257 +485,24 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 export default defineConfig({
   plugins: [svelte()],
   server: {
-    // Proxy untuk development lokal — teruskan /api ke backend
+    port: 5173,
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
         rewrite: (path) => path.replace(/^\/api/, ''),
-      }
-    }
-  }
+      },
+    },
+  },
 })
 ```
 
----
-
-## Frontend: `frontend/src/App.svelte`
-
-Komponen utama Svelte yang menampilkan dan mengelola todo list:
-
-```svelte
-<script>
-  import { onMount } from 'svelte';
-
-  // URL API diset saat build time via VITE_API_URL environment variable
-  // Di Kubernetes: VITE_API_URL=/api (diteruskan oleh Ingress ke backend)
-  const API_URL = import.meta.env.VITE_API_URL || '/api';
-
-  let todos = [];
-  let newTitle = '';
-  let newDescription = '';
-  let loading = false;
-  let error = null;
-
-  // Ambil semua todos dari API
-  async function fetchTodos() {
-    loading = true;
-    try {
-      const response = await fetch(`${API_URL}/todos`);
-      if (!response.ok) throw new Error('Gagal mengambil data todos');
-      todos = await response.json();
-    } catch (err) {
-      error = err.message;
-    } finally {
-      loading = false;
-    }
-  }
-
-  // Buat todo baru
-  async function createTodo() {
-    if (!newTitle.trim()) return;
-
-    try {
-      const response = await fetch(`${API_URL}/todos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: newTitle,
-          description: newDescription || null
-        })
-      });
-      if (!response.ok) throw new Error('Gagal membuat todo');
-
-      newTitle = '';
-      newDescription = '';
-      await fetchTodos(); // Refresh list
-    } catch (err) {
-      error = err.message;
-    }
-  }
-
-  // Toggle status selesai/belum
-  async function toggleTodo(todo) {
-    try {
-      const response = await fetch(`${API_URL}/todos/${todo.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ completed: !todo.completed })
-      });
-      if (!response.ok) throw new Error('Gagal mengupdate todo');
-      await fetchTodos();
-    } catch (err) {
-      error = err.message;
-    }
-  }
-
-  // Hapus todo
-  async function deleteTodo(id) {
-    try {
-      const response = await fetch(`${API_URL}/todos/${id}`, {
-        method: 'DELETE'
-      });
-      if (!response.ok) throw new Error('Gagal menghapus todo');
-      await fetchTodos();
-    } catch (err) {
-      error = err.message;
-    }
-  }
-
-  // Load todos saat komponen pertama kali dimount
-  onMount(fetchTodos);
-</script>
-
-<main>
-  <h1>Todo List - Kubernetes Edition</h1>
-
-  {#if error}
-    <div class="error">
-      Error: {error}
-      <button on:click={() => error = null}>Tutup</button>
-    </div>
-  {/if}
-
-  <!-- Form tambah todo baru -->
-  <form on:submit|preventDefault={createTodo} class="form-add">
-    <input
-      bind:value={newTitle}
-      placeholder="Judul todo..."
-      required
-    />
-    <input
-      bind:value={newDescription}
-      placeholder="Deskripsi (opsional)..."
-    />
-    <button type="submit">Tambah Todo</button>
-  </form>
-
-  <!-- Daftar todos -->
-  {#if loading}
-    <p>Memuat...</p>
-  {:else if todos.length === 0}
-    <p class="empty">Belum ada todo. Tambahkan yang pertama!</p>
-  {:else}
-    <ul class="todo-list">
-      {#each todos as todo (todo.id)}
-        <li class:completed={todo.completed}>
-          <input
-            type="checkbox"
-            checked={todo.completed}
-            on:change={() => toggleTodo(todo)}
-          />
-          <div class="todo-content">
-            <span class="title">{todo.title}</span>
-            {#if todo.description}
-              <span class="description">{todo.description}</span>
-            {/if}
-          </div>
-          <button
-            class="btn-delete"
-            on:click={() => deleteTodo(todo.id)}
-          >
-            Hapus
-          </button>
-        </li>
-      {/each}
-    </ul>
-  {/if}
-</main>
-
-<style>
-  main {
-    max-width: 600px;
-    margin: 0 auto;
-    padding: 2rem;
-    font-family: sans-serif;
-  }
-
-  h1 { color: #2c3e50; }
-
-  .error {
-    background: #fee;
-    border: 1px solid #f99;
-    padding: 1rem;
-    border-radius: 4px;
-    margin-bottom: 1rem;
-  }
-
-  .form-add {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    margin-bottom: 2rem;
-  }
-
-  .form-add input {
-    padding: 0.5rem;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 1rem;
-  }
-
-  .form-add button {
-    padding: 0.5rem 1rem;
-    background: #3498db;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 1rem;
-  }
-
-  .todo-list {
-    list-style: none;
-    padding: 0;
-  }
-
-  .todo-list li {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem;
-    border: 1px solid #eee;
-    border-radius: 4px;
-    margin-bottom: 0.5rem;
-  }
-
-  .todo-list li.completed .title {
-    text-decoration: line-through;
-    color: #999;
-  }
-
-  .todo-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .description {
-    font-size: 0.85rem;
-    color: #777;
-  }
-
-  .btn-delete {
-    padding: 0.25rem 0.75rem;
-    background: #e74c3c;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-  }
-
-  .empty {
-    text-align: center;
-    color: #999;
-    font-style: italic;
-  }
-</style>
-```
+> [!NOTE]
+> Proxy `/api` → `http://localhost:8000` hanya aktif saat **development** (`npm run dev`).
+> Di production (Docker/Kubernetes), routing `/api` ditangani oleh Nginx Ingress.
 
 ---
 
 ## Frontend: `frontend/nginx.conf`
-
-File konfigurasi Nginx untuk melayani Svelte SPA di production:
 
 ```nginx
 server {
@@ -564,32 +510,101 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
-    # Gzip compression untuk performa lebih baik
-    gzip on;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
-
-    # SPA fallback: semua route diteruskan ke index.html
-    # Ini penting agar client-side routing Svelte berfungsi dengan benar
     location / {
         try_files $uri $uri/ /index.html;
-    }
-
-    # Cache assets statis lebih lama
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
     }
 }
 ```
 
+> [!NOTE]
+> File ini sengaja dibuat minimal — cukup untuk SPA fallback.
+> Fitur seperti gzip dan cache header bisa ditambahkan nanti sesuai kebutuhan.
+
 ---
 
-> **Tips:** Simpan file `nginx.conf` di folder `frontend/` bersama `Dockerfile`. Saat Docker build, file ini akan disalin ke dalam image nginx.
+## Frontend: `frontend/Dockerfile`
 
-> **Perhatian:** Jangan lupa buat file `.dockerignore` di folder `frontend/` yang berisi `node_modules` dan `dist`. Ini akan mempercepat proses build Docker secara signifikan.
+```dockerfile
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+ARG VITE_API_URL=/api
+ENV VITE_API_URL=$VITE_API_URL
+RUN npm run build
+
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+**Perbedaan penting dengan backend Dockerfile:**
+- Base image: `node:20-alpine` (builder) → `nginx:alpine` (runtime)
+- `VITE_API_URL` di-set sebagai `ARG` karena dibutuhkan saat **build time** (`npm run build`)
+- Hasil build (`dist/`) di-copy ke Nginx, bukan kode sumber
+
+---
+
+## Root: `docker-compose.yml`
+
+Untuk menjalankan semua service sekaligus saat development lokal:
+
+```yaml
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: tododb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: tododb
+      DB_USER: postgres
+      DB_PASS: postgres
+      CORS_ORIGINS: http://localhost:5173,http://localhost:80
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:8000
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+```
+
+> [!NOTE]
+> Di `docker-compose.yml`, `VITE_API_URL` diset ke `http://localhost:8000` karena frontend (di port 80) perlu memanggil backend secara langsung dari browser. Berbeda dengan di Kubernetes, di mana Ingress yang menangani routing sehingga `VITE_API_URL=/api`.
 
 ---
 
 ## Selanjutnya
 
 - [02-backend-python/README.md](../02-backend-python/README.md) — Dockerize dan deploy FastAPI
+
