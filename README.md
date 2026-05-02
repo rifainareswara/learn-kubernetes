@@ -44,6 +44,12 @@ FASE 5 - Cloud & Production (Minggu 9-12)
   [09] Cloud Provider     → GKE, EKS, ACK
   [10] Observability      → Monitoring & Logging
   [11] CI/CD              → GitHub Actions & ArgoCD
+
+FASE 6 - Real Deploy (Minggu 13-15)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  [12] Real Deploy        → FastAPI + Svelte + PostgreSQL end-to-end
+                            Deploy lokal & cloud (GKE, EKS, ACK)
+                            CI/CD pipeline lengkap
 ```
 
 ---
@@ -83,6 +89,7 @@ Lihat [00-prasyarat/README.md](./00-prasyarat/README.md) untuk checklist lengkap
 | 09 | [Cloud](./09-cloud/README.md) | Deploy ke GKE, EKS, dan ACK | 1 minggu |
 | 10 | [Observability](./10-observability/README.md) | Monitoring & logging dengan Prometheus/Grafana | 3-4 hari |
 | 11 | [CI/CD](./11-cicd/README.md) | Otomasi deploy dengan GitHub Actions & ArgoCD | 3-4 hari |
+| 12 | [Real Deploy: Python + Svelte](./12-real-deploy-python-svelte/README.md) | Deploy aplikasi nyata FastAPI + Svelte + PostgreSQL ke lokal & cloud | 2-3 minggu |
 
 ---
 
@@ -130,6 +137,11 @@ kind: Pod
 ## Status Materi
 
 Semua materi dalam repo ini sudah lengkap dan siap digunakan. Jika menemukan kesalahan atau ingin berkontribusi, silakan buat issue atau pull request.
+
+| Modul | Status |
+|-------|--------|
+| 00 - 11 | Lengkap |
+| 12 - Real Deploy Python + Svelte | Lengkap |
 
 ---
 
