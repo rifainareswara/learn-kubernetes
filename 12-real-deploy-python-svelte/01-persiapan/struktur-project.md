@@ -24,17 +24,26 @@ Buat struktur ini di komputer kamu (di luar repo belajar ini):
 # Buat folder project kamu
 mkdir -p my-todo-app/{backend,frontend/src/lib,frontend/public,k8s/{backend,frontend,database,ingress}}
 cd my-todo-app
+
+# Buat file placeholder agar struktur langsung terlihat jelas
+touch backend/{main.py,requirements.txt,.env.example,Dockerfile}
+touch frontend/{nginx.conf,package.json,vite.config.js,Dockerfile,.env.example}
+touch frontend/src/{App.svelte,main.js}
+touch frontend/src/lib/api.js
+touch docker-compose.yml
 ```
 
 Struktur lengkapnya akan terlihat seperti ini:
 
 ```
 my-todo-app/                        ← Ini ada di komputer kamu (luar repo)
+├── docker-compose.yml              # Jalankan semua service sekaligus (dev lokal)
+│
 ├── backend/                        # Kode Python FastAPI
 │   ├── main.py                     # Entry point aplikasi
 │   ├── requirements.txt            # Dependensi Python
 │   ├── .env.example                # Template environment variable
-│   └── Dockerfile                  # Instruksi build Docker image
+│   └── Dockerfile                  # Instruksi build Docker image (multi-stage)
 │
 ├── frontend/                       # Kode Svelte
 │   ├── src/
@@ -44,10 +53,11 @@ my-todo-app/                        ← Ini ada di komputer kamu (luar repo)
 │   │   └── main.js                # Entry point Svelte
 │   ├── public/
 │   │   └── favicon.png
-│   ├── nginx.conf                  # Konfigurasi nginx untuk production
-│   ├── package.json
-│   ├── vite.config.js
-│   └── Dockerfile
+│   ├── nginx.conf                  # Konfigurasi nginx untuk serve SPA
+│   ├── package.json                # Dependensi Node.js
+│   ├── vite.config.js              # Konfigurasi bundler Vite
+│   ├── .env.example                # Template environment variable (VITE_API_URL)
+│   └── Dockerfile                  # Instruksi build Docker image (multi-stage)
 │
 └── k8s/                            # Semua manifest Kubernetes
     ├── backend/
