@@ -63,14 +63,14 @@ aws ecr get-login-password --region $AWS_REGION | \
 
 ```bash
 # ── Backend ──────────────────────────────────────────────────────────────────
-docker tag backend:local \
+docker tag todolist-backend:local \
   $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp/backend:v1.0
 
 docker push \
   $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp/backend:v1.0
 
 # ── Frontend ──────────────────────────────────────────────────────────────────
-docker tag frontend:local \
+docker tag todolist-frontend:local \
   $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/myapp/frontend:v1.0
 
 docker push \

@@ -59,14 +59,14 @@ docker login \
 # Format: registry.cn-REGION.aliyuncs.com/NAMESPACE/REPOSITORY:TAG
 
 # ── Backend ──────────────────────────────────────────────────────────────────
-docker tag backend:local \
+docker tag todolist-backend:local \
   registry.cn-jakarta.aliyuncs.com/mycompany-myapp/backend:v1.0
 
 docker push \
   registry.cn-jakarta.aliyuncs.com/mycompany-myapp/backend:v1.0
 
 # ── Frontend ──────────────────────────────────────────────────────────────────
-docker tag frontend:local \
+docker tag todolist-frontend:local \
   registry.cn-jakarta.aliyuncs.com/mycompany-myapp/frontend:v1.0
 
 docker push \

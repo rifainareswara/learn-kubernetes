@@ -134,7 +134,7 @@ Gunakan cara ini jika ingin memahami bagaimana setiap komponen bekerja secara te
 
 ```bash
 # Dari root project
-docker build -t backend:local -f backend/Dockerfile backend/
+docker build -t todolist-backend:local -f backend/Dockerfile backend/
 
 # Verifikasi image berhasil dibuat
 docker images | grep backend
@@ -150,7 +150,7 @@ docker network create todoapp-net
 
 # Jalankan PostgreSQL
 docker run -d \
-  --name postgres-local \
+  --name todolist-postgres \
   --network todoapp-net \
   -e POSTGRES_DB=tododb \
   -e POSTGRES_USER=postgres \
@@ -162,25 +162,25 @@ docker run -d \
 sleep 5
 
 # Verifikasi PostgreSQL berjalan
-docker ps | grep postgres-local
+docker ps | grep todolist-postgres
 ```
 
 **Step 3: Jalankan backend**
 
 ```bash
 docker run -d \
-  --name backend-local \
+  --name todolist-backend \
   --network todoapp-net \
   -p 8000:8000 \
-  -e DB_HOST=postgres-local \
+  -e DB_HOST=todolist-postgres \
   -e DB_PORT=5432 \
   -e DB_NAME=tododb \
   -e DB_USER=postgres \
   -e DB_PASS=postgres \
-  backend:local
+  todolist-backend:local
 
 # Verifikasi backend berjalan
-docker ps | grep backend-local
+docker ps | grep todolist-backend
 ```
 
 **Step 4: Test**
@@ -197,15 +197,15 @@ open http://localhost:8000/docs
 **Cleanup setelah selesai:**
 
 ```bash
-docker stop backend-local postgres-local
-docker rm backend-local postgres-local
+docker stop todolist-backend todolist-postgres
+docker rm todolist-backend todolist-postgres
 docker network rm todoapp-net
 ```
 
 > [!TIP]
 > Perhatikan perbedaan `DB_HOST` antara dua cara:
-> - **Docker Compose**: `DB_HOST=postgres` (nama service di compose)
-> - **Manual**: `DB_HOST=postgres-local` (nama container yang kamu buat)
+> - **Docker Compose**: `DB_HOST=todolist-postgres` (nama service di compose)
+> - **Manual**: `DB_HOST=todolist-postgres` (nama container yang kamu buat)
 >
 > Di Kubernetes nanti, `DB_HOST` diisi nama **Service** PostgreSQL, bukan IP address.
 

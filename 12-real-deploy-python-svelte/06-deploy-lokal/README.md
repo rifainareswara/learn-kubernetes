@@ -54,12 +54,12 @@ Lihat [langkah-deploy.md](./langkah-deploy.md) untuk panduan step-by-step yang l
 
 ```bash
 # 1. Build images
-docker build -t backend:local ./backend
-docker build --build-arg VITE_API_URL=/api -t frontend:local ./frontend
+docker build -t todolist-backend:local ./backend
+docker build --build-arg VITE_API_URL=/api -t todolist-frontend:local ./frontend
 
 # 2. Load ke cluster lokal
-minikube image load backend:local
-minikube image load frontend:local
+minikube image load todolist-backend:local
+minikube image load todolist-frontend:local
 
 # 3. Deploy semua
 kubectl create namespace myapp

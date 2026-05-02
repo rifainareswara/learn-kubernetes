@@ -554,7 +554,8 @@ Untuk menjalankan semua service sekaligus saat development lokal:
 
 ```yaml
 services:
-  postgres:
+  todolist-postgres:
+    container_name: todolist-postgres
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: tododb
@@ -570,22 +571,24 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
+  todolist-backend:
+    container_name: todolist-backend
     build: ./backend
     ports:
       - "8000:8000"
     environment:
-      DB_HOST: postgres
+      DB_HOST: todolist-postgres
       DB_PORT: 5432
       DB_NAME: tododb
       DB_USER: postgres
       DB_PASS: postgres
       CORS_ORIGINS: http://localhost:5173,http://localhost:80
     depends_on:
-      postgres:
+      todolist-postgres:
         condition: service_healthy
 
-  frontend:
+  todolist-frontend:
+    container_name: todolist-frontend
     build:
       context: ./frontend
       args:
@@ -593,7 +596,7 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - backend
+      - todolist-backend
 
 volumes:
   postgres_data:

@@ -151,18 +151,18 @@ pwd
 cd frontend/
 
 # Build image dengan default API URL (/api)
-docker build -t frontend:local .
+docker build -t todolist-frontend:local .
 
 # Atau build dengan custom API URL (untuk testing)
 docker build \
   --build-arg VITE_API_URL=http://localhost:8000 \
-  -t frontend:local .
+  -t todolist-frontend:local .
 
 # Verifikasi image
 docker images | grep frontend
 
 # Test jalankan secara lokal
-docker run -p 8080:80 frontend:local
+docker run -p 8080:80 todolist-frontend:local
 
 # Buka browser
 open http://localhost:8080

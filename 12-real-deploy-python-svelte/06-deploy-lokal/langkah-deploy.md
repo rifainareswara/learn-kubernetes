@@ -43,7 +43,7 @@ Semua perintah build di bawah **dijalankan dari folder ini** (tidak perlu `cd` m
 
 ```bash
 # ── Build Backend (FastAPI) ───────────────────────────────────────────────────
-docker build -t backend:local -f backend/Dockerfile backend/
+docker build -t todolist-backend:local -f backend/Dockerfile backend/
 
 # Verifikasi image berhasil dibuat
 docker images | grep backend
@@ -54,7 +54,7 @@ docker images | grep backend
 # ── Build Frontend (Svelte) ──────────────────────────────────────────────────
 docker build \
   --build-arg VITE_API_URL=/api \
-  -t frontend:local \
+  -t todolist-frontend:local \
   -f frontend/Dockerfile frontend/
 
 # Verifikasi
@@ -76,33 +76,33 @@ Docker images yang ada di local machine kamu **tidak otomatis tersedia** di Mini
 
 ```bash
 # Load backend image
-minikube image load backend:local
+minikube image load todolist-backend:local
 
 # Load frontend image
-minikube image load frontend:local
+minikube image load todolist-frontend:local
 
 # Verifikasi image sudah ada di Minikube
 minikube image ls | grep -E "backend|frontend"
 # Output:
-# docker.io/library/backend:local
-# docker.io/library/frontend:local
+# docker.io/library/todolist-backend:local
+# docker.io/library/todolist-frontend:local
 ```
 
 ### Untuk Kind
 
 ```bash
 # Load backend image
-kind load docker-image backend:local --name <nama-cluster-kind-kamu>
+kind load docker-image todolist-backend:local --name <nama-cluster-kind-kamu>
 
 # Load frontend image
-kind load docker-image frontend:local --name <nama-cluster-kind-kamu>
+kind load docker-image todolist-frontend:local --name <nama-cluster-kind-kamu>
 
 # Cek nama cluster Kind kamu
 kind get clusters
 
 # Jika hanya ada satu cluster, tidak perlu --name
-kind load docker-image backend:local
-kind load docker-image frontend:local
+kind load docker-image todolist-backend:local
+kind load docker-image todolist-frontend:local
 ```
 
 ---
@@ -120,7 +120,7 @@ Edit `k8s/backend/deployment.yaml`:
 # Ubah bagian ini:
 containers:
   - name: backend
-    image: backend:local        # Nama local image
+    image: todolist-backend:local        # Nama local image
     imagePullPolicy: Never      # Jangan pull dari registry
 ```
 
@@ -130,7 +130,7 @@ Edit `k8s/frontend/deployment.yaml`:
 # Ubah bagian ini:
 containers:
   - name: frontend
-    image: frontend:local       # Nama local image
+    image: todolist-frontend:local       # Nama local image
     imagePullPolicy: Never      # Jangan pull dari registry
 ```
 
@@ -440,7 +440,7 @@ kubectl get namespace myapp
 # minikube delete
 
 # Hapus local Docker images
-docker rmi backend:local frontend:local
+docker rmi todolist-backend:local todolist-frontend:local
 ```
 
 ---

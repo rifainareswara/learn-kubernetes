@@ -60,14 +60,14 @@ cat ~/.docker/config.json | grep asia-southeast1
 # Format: REGION-docker.pkg.dev/PROJECT_ID/REPOSITORY/IMAGE:TAG
 
 # ── Backend ──────────────────────────────────────────────────────────────────
-docker tag backend:local \
+docker tag todolist-backend:local \
   asia-southeast1-docker.pkg.dev/PROJECT_ID/myapp/backend:v1.0
 
 docker push \
   asia-southeast1-docker.pkg.dev/PROJECT_ID/myapp/backend:v1.0
 
 # ── Frontend ──────────────────────────────────────────────────────────────────
-docker tag frontend:local \
+docker tag todolist-frontend:local \
   asia-southeast1-docker.pkg.dev/PROJECT_ID/myapp/frontend:v1.0
 
 docker push \
