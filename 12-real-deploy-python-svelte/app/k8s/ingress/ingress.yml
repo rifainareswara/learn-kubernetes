@@ -1,0 +1,101 @@
+# =============================================================================
+# Kubernetes Ingress untuk Aplikasi Todo
+# =============================================================================
+# Ingress mendefinisikan aturan routing HTTP dari luar cluster ke Services.
+#
+# Routing yang dikonfigurasi:
+# - /api/*  →  Service backend (FastAPI)  — path di-rewrite (hapus /api prefix)
+# - /*      →  Service frontend (Svelte)  — semua traffic lainnya
+#
+# PREREQUISITE: Nginx Ingress Controller harus sudah terinstall di cluster.
+# Lihat README.md di folder ini untuk cara installnya.
+# =============================================================================
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: todolist-ingress
+  namespace: todolist
+  labels:
+    app: todolist
+  annotations:
+    # Tentukan Ingress Controller yang digunakan
+    kubernetes.io/ingress.class: "nginx"
+
+    # ── Path Rewriting ────────────────────────────────────────────────────────
+    # Rewrite target: capture group $1 dari regex path di bawah
+    # Request: /api/todos  →  diteruskan ke backend sebagai: /todos
+    # Request: /api/todos/1  →  diteruskan sebagai: /todos/1
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+
+    # ── CORS Headers (jika diperlukan) ────────────────────────────────────────
+    # Biasanya tidak diperlukan jika frontend dan backend berada di domain yang sama
+    # nginx.ingress.kubernetes.io/enable-cors: "true"
+
+    # ── SSL Redirect (aktifkan jika HTTPS sudah dikonfigurasi) ───────────────
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+
+    # ── Rate Limiting (opsional, untuk keamanan) ─────────────────────────────
+    # Batasi request ke endpoint API untuk mencegah abuse
+    # nginx.ingress.kubernetes.io/limit-rps: "20"
+
+    # ── Proxy Buffer Size (jika backend mengirim header besar) ───────────────
+    # nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+
+spec:
+  # ingressClassName adalah cara modern untuk menentukan controller
+  # Bisa digunakan sebagai alternatif annotation kubernetes.io/ingress.class
+  ingressClassName: nginx
+
+  # ── Rules (Aturan Routing) ───────────────────────────────────────────────────
+  rules:
+    # Host: ganti dengan domain kamu di production
+    # Untuk localhost/Minikube, biarkan host kosong atau gunakan "localhost"
+    - host: ""  # Tanpa host: cocokkan semua hostname
+      # Untuk production: - host: todolist.example.com
+      http:
+        paths:
+          # ── Path 1: Backend API ───────────────────────────────────────────
+          # Semua request ke /api/* diteruskan ke Service backend
+          # Regex capture group: /api/(.*) → backend menerima: /$1
+          #
+          # Contoh:
+          # Browser: GET /api/todos    → Backend menerima: GET /todos
+          # Browser: GET /api/todos/1  → Backend menerima: GET /todos/1
+          # Browser: GET /api/health   → Backend menerima: GET /health
+          - path: /api/(.*)
+            pathType: ImplementationSpecific   # Diperlukan untuk regex path
+
+            backend:
+              service:
+                name: backend     # Nama Service FastAPI
+                port:
+                  number: 8000
+
+          # ── Path 2: Frontend SPA ──────────────────────────────────────────
+          # Semua traffic lainnya diteruskan ke Service frontend (Svelte/Nginx)
+          # Nginx frontend akan handle SPA routing via try_files
+          - path: /(.*)
+            pathType: ImplementationSpecific
+
+            backend:
+              service:
+                name: frontend    # Nama Service Svelte/Nginx
+                port:
+                  number: 80
+
+  # ── TLS/HTTPS ────────────────────────────────────────────────────────────────
+  # Uncomment dan konfigurasi untuk mengaktifkan HTTPS dengan cert-manager
+  #
+  # Prerequisite:
+  # 1. cert-manager sudah terinstall
+  # 2. ClusterIssuer "letsencrypt-prod" sudah dibuat (lihat README)
+  # 3. Domain DNS sudah diarahkan ke IP Ingress Controller
+  #
+  # tls:
+  #   - hosts:
+  #       - todolist.example.com
+  #     secretName: todolist-tls-cert   # cert-manager akan membuat Secret ini secara otomatis
+  #
+  # Tambahkan annotation ini jika menggunakan cert-manager:
+  # cert-manager.io/cluster-issuer: "letsencrypt-prod"

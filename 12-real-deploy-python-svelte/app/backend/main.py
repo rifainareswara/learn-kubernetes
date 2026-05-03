@@ -6,11 +6,12 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from datetime import datetime
 from typing import Optional
+from urllib.parse import quote_plus
 import os
 
 DATABASE_URL = (
     f"postgresql://{os.getenv('DB_USER', 'postgres')}"
-    f":{os.getenv('DB_PASS', 'postgres')}"
+    f":{quote_plus(os.getenv('DB_PASS', 'postgres'))}"
     f"@{os.getenv('DB_HOST', 'localhost')}"
     f":{os.getenv('DB_PORT', '5432')}"
     f"/{os.getenv('DB_NAME', 'tododb')}"
